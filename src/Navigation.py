@@ -152,10 +152,6 @@ class Navigation:
             base_index = tolerance
             acceleration = max(0.0001, abs(acceleration)) * (acceleration / max(0.0001, abs(acceleration))) 
 
-            # t = [-v_0 (+/-) sqrt(v_0^2 + 2a*s_d)] / a
-            # => T = max(t_+, t_-)
-            # v_f = v_0 + a*T
-
             # computed speeds
             linear_speeds = []
             angular_speeds = []
