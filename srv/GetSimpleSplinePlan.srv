@@ -1,0 +1,4 @@
+nav_msgs/Path waypoints_path
+---
+nav_msgs/Path spline_path
+float64[] sd_steps 
