@@ -176,7 +176,7 @@ class Navigation:
                 angular_speeds.append((abs(linear_speeds[len(linear_speeds) - 1]) / max(0.0001, abs(R))) * w_sgn)
                 speed_init = True
 
-                # t = [-v_0] / a (+/-) [sqrt(v_0^2 + 2a*s_d)] / a
+                # t = [-v_0] / a (+/-) [sqrt(v_0^2 + 2a*s_d)] / a 
                 # => T = max(t_+, t_-)
                 # v_f = v_0 + a*T       
             return (linear_speeds, angular_speeds)
