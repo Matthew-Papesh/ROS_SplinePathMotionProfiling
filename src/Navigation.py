@@ -132,7 +132,7 @@ class Navigation:
             self.node_rate.sleep()
         self.setSpeed(0, 0)
 
-    def splineDrive(self, spline_path: Path, spline_sd_steps: list, spline_cumulative_sd_steps: list, acceleration: float, max_angular_speed: float):
+    def splineDrive(self, spline_path: Path, spline_sd_steps: list, spline_cumulative_sd_steps: list, acceleration: float, max_linear_speed: float, max_angular_speed: float):
         
         def getPoseIndexByMSE(path: Path, pose: PoseStamped) -> int:
             min_loss = None
@@ -147,7 +147,7 @@ class Navigation:
                     ideal_pose_index = i
             return ideal_pose_index
 
-        def getPoseSpeeds(spline_path: Path, sd_steps: list, acceleration, max_angular_speed) -> tuple[list, list]:
+        def getPoseSpeeds(spline_path: Path, sd_steps: list, acceleration, max_linear_speed: float, max_angular_speed: float) -> tuple[list, list]:
             tolerance = 1 # how much reach +/- the index to select other points for approximating a spline circle
             base_index = tolerance 
             acceleration = max(0.0001, abs(acceleration)) 
@@ -157,6 +157,7 @@ class Navigation:
             angular_speeds = []
             deccelerate = False
             # iterate through spline waypoints to compute speeds
+            print("remaining distances:")
             for index in range(0, len(spline_path.poses)):
                 # scroll tolerance range while iterating
                 if index > base_index and index <= len(spline_path.poses) - tolerance - 1:
@@ -180,21 +181,27 @@ class Navigation:
                 deccel_distance = abs(-pow(v_1, 2.0) / (2.0 * acceleration))
 
                 # check to deccelerate or not: check if remaining spline distance is longer than the distance needed to deccelerate
-                remaining_distance = spline_cumulative_sd_steps[len(spline_cumulative_sd_steps) - 1] - spline_cumulative_sd_steps[index]
-                if not deccelerate and abs(remaining_distance) <= abs(deccel_distance):
+                remaining_distance = abs(spline_cumulative_sd_steps[len(spline_cumulative_sd_steps) - 1] - spline_cumulative_sd_steps[index])
+                remaining_distance = remaining_distance if remaining_distance > 0.05 else 0
+                print(remaining_distance)
+                if not deccelerate and remaining_distance <= deccel_distance:
                     # if just flagged True, the robot must of just noticed its speed, or any faster, would require slowing now to not overshoot the
                     # end of the spline. Once deccelerating, the robot should not wait to slow or ever go faster; don't consider handling those cases.
                     deccelerate = True
                     acceleration = -abs(acceleration)
                 if abs(w_1) > abs(max_angular_speed):
-                    # the robot must of just met/passed max speed threshold(s); do not accelerate here but hold constant speed at the max angular speed.
+                    # the robot must of just met/passed the max angular speed threshold; do not accelerate here but hold constant speed at the max angular speed.
                     w_1 = max_angular_speed * w_sgn
                     v_1 = max_angular_speed * R
-                elif deccelerate and abs(remaining_distance) > abs(deccel_distance):
+                elif abs(v_1) > abs(max_linear_speed):
+                    # the robot must of just met/passed the max linear speed threshold; do not accelerate here but hold constant speed at the max linear speed. 
+                    w_1 = max_linear_speed / max(0.0001, abs(R)) * w_sgn
+                    v_1 = max_linear_speed
+                elif deccelerate and remaining_distance > deccel_distance:
                     # if the robot is slowing down to soon stop but find the stop may come too early, then hold speeds constants
-                    #v_1 = v_0
-                    #w_1 = w_0
-                    pass
+                    v_1 = v_0
+                    w_1 = w_0
+
                 # add speeds
                 linear_speeds.append(v_1)
                 angular_speeds.append(w_1)
@@ -202,7 +209,7 @@ class Navigation:
             return (linear_speeds, angular_speeds)
 
         # compute wheel speeds
-        speeds = getPoseSpeeds(spline_path, spline_sd_steps, acceleration, max_angular_speed)
+        speeds = getPoseSpeeds(spline_path, spline_sd_steps, acceleration, max_linear_speed, max_angular_speed)
         # print data
         lin_speeds, ang_speeds = speeds[0], speeds[1] 
         print("linear speeds:")
@@ -232,7 +239,7 @@ class Navigation:
         spline_path = spline_plan[0]
         spline_sd_steps = spline_plan[1]
         spline_cumulative_sd_steps = spline_plan[2]
-        self.splineDrive(spline_path, spline_sd_steps, spline_cumulative_sd_steps, 0.05, 0.7)
+        self.splineDrive(spline_path, spline_sd_steps, spline_cumulative_sd_steps, 0.5, 0.5, 0.2)
         rospy.spin()
 
 if __name__ == "__main__":
