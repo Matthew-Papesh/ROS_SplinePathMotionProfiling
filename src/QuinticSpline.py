@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import math
 import handler
 
-from splines.srv import GetSimpleSplinePlan, GetSimpleSplinePlanResponse
+from ROS_SplinePathMotionProfiling.srv import GetSimpleSplinePlan, GetSimpleSplinePlanResponse
 
 from geometry_msgs.msg import PoseStamped
 import rospy
@@ -75,7 +75,7 @@ class QuinticSplinePath:
         self.plot_range = ((-4, 6), (-3, 6))
 
         self.path_x, self.path_y = None, None
-        self.sd_steps = None
+        self.sd_steps, self.cumulative_sd_steps = None, None
 
         self.initPublishers()
         self.initSubscribers()
@@ -92,20 +92,6 @@ class QuinticSplinePath:
         """
         pass
     
-    # s_d = v_0*t + (1/2)a*t^2
-    # 0 = (1/2)a*t^2 + v_0*t - s_d
-
-    # A = (1/2)a, B = v_0, C = -s_d
-    # t = [-B (+/-) sqrt(B^2 - 4AC)] / [2A]
-
-    # t = [-v_0 (+/-) sqrt(v_0^2 + 4*(1/2)a*s_d)] / [2*(1/2)a]
-
-
-
-    # t = [-v_0 (+/-) sqrt(v_0^2 + 2a*s_d)] / a
-    # => T = max(t_+, t_-)
-    # v_f = v_0 + a*T
-
     def handleSplinePlanService(self, request):
         """
         Represents the GetSplinePlan service for a simple spline path that expects a specified Path of waypoints 
@@ -116,7 +102,7 @@ class QuinticSplinePath:
         spline_path_points = self.getInterpolatedSpline(simple_path.poses)
         spline_path = handler.get_path(spline_path_points[0], spline_path_points[1])
         
-        return GetSimpleSplinePlanResponse(spline_path=spline_path, sd_steps=spline_path_points[2])
+        return GetSimpleSplinePlanResponse(spline_path=spline_path, sd_steps=spline_path_points[2], cumulative_sd_steps=spline_path_points[3])
 
     def plot(self, path_x: list, path_y: list, plot: bool):
         if plot:
@@ -132,9 +118,9 @@ class QuinticSplinePath:
             plt.grid(visible=True)
             plt.show()
 
-    def getInterpolatedSpline(self, waypoints: list[PoseStamped]) -> tuple[list, list, list]:
+    def getInterpolatedSpline(self, waypoints: list[PoseStamped]) -> tuple[list, list, list, list]:
         # Create subpoint lists
-        path_x, path_y, sd_steps = [], [], []
+        path_x, path_y, sd_steps, cumulative_sd_steps = [], [], [], []
         # Iterate between waypoints to generate quintic splines
         for p_index in range(1, len(waypoints)):
             p_0 = waypoints[p_index - 1]
@@ -165,18 +151,21 @@ class QuinticSplinePath:
             for b_index in range(0, partitions + 1):
                 step_x = partition * b_index 
                 # Compute derivative to integrate arc distance between points as step size arc distance
-                s_d = pow(1.0 + pow(q.dydx(step_x), 2.0), 0.5) * partition 
+                sd = pow(1.0 + pow(q.dydx(step_x), 2.0), 0.5) * partition 
+                cumulative_sd = 0.0 if b_index == 0 else sd + cumulative_sd_steps[len(sd_steps) - 1]
                 # Rotate to globabl frame of reference about the origin with +p_0 heading, and translate to restore global spline
                 x = step_x * math.cos(handler.get_heading(p_0)) - q.f(step_x) * math.sin(handler.get_heading(p_0)) + p_0.pose.position.x
                 y = step_x * math.sin(handler.get_heading(p_0)) + q.f(step_x) * math.cos(handler.get_heading(p_0)) + p_0.pose.position.y
                 # Append global path subpoints computed
                 path_x.append(x)
                 path_y.append(y)  
-                sd_steps.append(s_d)
+                sd_steps.append(sd)
+                cumulative_sd_steps.append(cumulative_sd)
         self.path_x = path_x
         self.path_y = path_y
         self.sd_steps = sd_steps
-        return (path_x, path_y, sd_steps)
+        self.cumulative_sd_steps = cumulative_sd_steps
+        return (path_x, path_y, sd_steps, cumulative_sd_steps)
     
     def run(self):
         simple_spline_service = rospy.Service("/quintic_spline_path/simple_spline_plan", GetSimpleSplinePlan, self.handleSplinePlanService)
