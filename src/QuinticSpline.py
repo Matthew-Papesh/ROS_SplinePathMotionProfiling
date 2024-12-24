@@ -150,13 +150,16 @@ class QuinticSplinePath:
             partitions = 100
             # The amount to step by through x-domain when interpolating
             partition = rel_x / partitions
+            # The initial arc distance for the current spline along the path; the spline created between two waypoints such that
+            # the initial arc distance is the cumulative distance of the path traveled up until that point
+            init_sd = 0 if len(cumulative_sd_steps) < 1 else cumulative_sd_steps[len(cumulative_sd_steps) - 1]
 
             # Iterate through all partitions to compute the relative spline; 
             for b_index in range(0, partitions + 1):
                 step_x = partition * b_index 
                 # Compute derivative to integrate arc distance between points as step size arc distance
                 sd = pow(1.0 + pow(q.dydx(step_x), 2.0), 0.5) * partition 
-                cumulative_sd = 0.0 if b_index == 0 else sd + cumulative_sd_steps[len(sd_steps) - 1]
+                cumulative_sd = init_sd if b_index == 0 else sd + cumulative_sd_steps[len(cumulative_sd_steps) - 1]
                 # Rotate to globabl frame of reference about the origin with +p_0 heading, and translate to restore global spline
                 x = step_x * math.cos(handler.get_heading(p_0)) - q.f(step_x) * math.sin(handler.get_heading(p_0)) + p_0.pose.position.x
                 y = step_x * math.sin(handler.get_heading(p_0)) + q.f(step_x) * math.cos(handler.get_heading(p_0)) + p_0.pose.position.y

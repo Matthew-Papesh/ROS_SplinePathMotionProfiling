@@ -228,7 +228,7 @@ class Navigation:
                     # if just flagged True, the robot must of just noticed its speed, or any faster, would require slowing now to not overshoot the
                     # end of the spline. Once deccelerating, the robot should not wait to slow or ever go faster; don't consider handling those cases.
                     deccelerate = True
-                    #acceleration = -abs(acceleration)
+                    acceleration = -abs(acceleration)
                 if abs(w_1) > abs(max_angular_speed):
                     # the robot must of just met/passed the max angular speed threshold; do not accelerate here but hold constant speed at the max angular speed.
                     w_1 = max_angular_speed * w_sgn
@@ -284,7 +284,7 @@ class Navigation:
         self.splineDrive(spline_plan[0], spline_plan[1], spline_plan[2], acceleration, max_linear_speed, max_angular_speed)
 
     def run(self):
-        self.driveSplinePath([(4,2,-math.pi/4.0), (5,0,-math.pi/2.0)], 0.15, 1, 0.5)
+        self.driveSplinePath([(4,2,-math.pi/4.0), (5,1,-math.pi/2.0), (4, 0, -math.pi*3.0/4.0), (0, 0, math.pi)], 0.03, 0.3, 0.8)
         rospy.spin()
 
 if __name__ == "__main__":
