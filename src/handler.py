@@ -27,11 +27,11 @@ def get_pose_stamped(x: float, y: float, heading: float) -> PoseStamped:
     return pose
 
 def get_path(x_coords: list, y_coords: list) -> Path:
-    print((x_coords, y_coords))
     count = min(len(x_coords), len(y_coords))
     path = Path()
     for i in range(0, count):
         theta = 0.0
+        print((x_coords[i], y_coords[i]))
         if i < count - 1:
             theta = math.atan2(y_coords[i + 1] - y_coords[i], x_coords[i + 1] - x_coords[i])
         else:
@@ -39,19 +39,30 @@ def get_path(x_coords: list, y_coords: list) -> Path:
         path.poses.append(get_pose_stamped(x_coords[i], y_coords[i], theta))
     return path
 
-def euclid_distance(p0: Tuple[float, float], p1: Tuple[float, float]) -> float:
+def euclid_distance(p0: tuple[float, float], p1: tuple[float, float]) -> float:
     return pow(pow(p1[0] - p0[0], 2.0) + pow(p1[1] - p0[1], 2.0), 0.5)
 
-def get_circle(p_0: Tuple[float, float], p_1: Tuple[float, float], p_2: Tuple[float, float]) -> Tuple[float, float, float]:
+def non_zero(x: float, tolerance: float):
+    """
+    Returns the value x provided its magnitude is greater than or equal to the specified tolerance; else returns the tolerance to approximate zero.
+    :param x [float] The specified value
+    :param tolerance [float] The specified tolerance
+    :returns a non zero value of x
+    """
+    magnitude = max(abs(tolerance), abs(x))
+    sgn = 1.0 if x >= 0 else -1.0
+    return magnitude * sgn
+
+def get_circle(p_0: tuple[float, float], p_1: tuple[float, float], p_2: tuple[float, float]) -> tuple[float, float, float]:
     # given points:
     (x_0, y_0) = (p_0[0], p_0[1])
     (x_1, y_1) = (p_1[0], p_1[1])
     (x_2, y_2) = (p_2[0], p_2[1])
     
     # compute coefficients
-    A = -(pow(x_0, 2.0)*y_1 - pow(x_0, 2.0)*y_2 - pow(x_1, 2.0)*y_0 + pow(x_1, 2.0)*y_2 + pow(x_2, 2.0)*y_0 - pow(x_2, 2.0)*y_1 + pow(y_0, 2.0)*y_1 - pow(y_0, 2.0)*y_2 - y_0*pow(y_1, 2.0) + y_0*pow(y_2, 2.0) + pow(y_1, 2.0)*y_2 - y_1*pow(y_2, 2.0))/(2*(x_0*y_1 - x_1*y_0 - x_0*y_2 + x_2*y_0 + x_1*y_2 - x_2*y_1))
-    B = -(- pow(x_0, 2.0)*x_1 + pow(x_0, 2.0)*x_2 + x_0*pow(x_1, 2.0) - x_0*pow(x_2, 2.0) + x_0*pow(y_1, 2.0) - x_0*pow(y_2, 2.0) - pow(x_1, 2.0)*x_2 + x_1*pow(x_2, 2.0) - x_1*pow(y_0, 2.0) + x_1*pow(y_2, 2.0) + x_2*pow(y_0, 2.0) - x_2*pow(y_1, 2.0))/(2*(x_0*y_1 - x_1*y_0 - x_0*y_2 + x_2*y_0 + x_1*y_2 - x_2*y_1))
-    C = (- pow(x_0, 2.0)*x_1*y_2 + pow(x_0, 2.0)*x_2*y_1 + x_0*pow(x_1, 2.0)*y_2 - x_0*pow(x_2, 2.0)*y_1 + x_0*pow(y_1, 2.0)*y_2 - x_0*y_1*pow(y_2, 2.0) - pow(x_1, 2.0)*x_2*y_0 + x_1*pow(x_2, 2.0)*y_0 - x_1*pow(y_0, 2.0)*y_2 + x_1*y_0*pow(y_2, 2.0) + x_2*pow(y_0, 2.0)*y_1 - x_2*y_0*pow(y_1, 2.0))/(x_0*y_1 - x_1*y_0 - x_0*y_2 + x_2*y_0 + x_1*y_2 - x_2*y_1)
+    A = -(pow(x_0, 2.0)*y_1 - pow(x_0, 2.0)*y_2 - pow(x_1, 2.0)*y_0 + pow(x_1, 2.0)*y_2 + pow(x_2, 2.0)*y_0 - pow(x_2, 2.0)*y_1 + pow(y_0, 2.0)*y_1 - pow(y_0, 2.0)*y_2 - y_0*pow(y_1, 2.0) + y_0*pow(y_2, 2.0) + pow(y_1, 2.0)*y_2 - y_1*pow(y_2, 2.0))/non_zero(2*(x_0*y_1 - x_1*y_0 - x_0*y_2 + x_2*y_0 + x_1*y_2 - x_2*y_1), 0.000001)
+    B = -(- pow(x_0, 2.0)*x_1 + pow(x_0, 2.0)*x_2 + x_0*pow(x_1, 2.0) - x_0*pow(x_2, 2.0) + x_0*pow(y_1, 2.0) - x_0*pow(y_2, 2.0) - pow(x_1, 2.0)*x_2 + x_1*pow(x_2, 2.0) - x_1*pow(y_0, 2.0) + x_1*pow(y_2, 2.0) + x_2*pow(y_0, 2.0) - x_2*pow(y_1, 2.0))/non_zero(2*(x_0*y_1 - x_1*y_0 - x_0*y_2 + x_2*y_0 + x_1*y_2 - x_2*y_1), 0.000001)
+    C = (- pow(x_0, 2.0)*x_1*y_2 + pow(x_0, 2.0)*x_2*y_1 + x_0*pow(x_1, 2.0)*y_2 - x_0*pow(x_2, 2.0)*y_1 + x_0*pow(y_1, 2.0)*y_2 - x_0*y_1*pow(y_2, 2.0) - pow(x_1, 2.0)*x_2*y_0 + x_1*pow(x_2, 2.0)*y_0 - x_1*pow(y_0, 2.0)*y_2 + x_1*y_0*pow(y_2, 2.0) + x_2*pow(y_0, 2.0)*y_1 - x_2*y_0*pow(y_1, 2.0))/non_zero(x_0*y_1 - x_1*y_0 - x_0*y_2 + x_2*y_0 + x_1*y_2 - x_2*y_1, 0.000001)
     
     # computed circle properties
     x_center = -A

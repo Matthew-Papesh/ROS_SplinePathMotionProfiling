@@ -56,11 +56,10 @@ class Navigation:
         self.cmd_vel_subscriber_flag = True
         self.node_rate.sleep()
 
-    def requestSimpleSplinePlan(self, start: PoseStamped, goal: PoseStamped) -> tuple[Path, list, list]:
+    def requestSimpleSplinePlan(self, waypoints: list) -> tuple[Path, list, list]:
         """
-        Requests a interpolated spline path of poses given a specified starting and goal position. 
-        :param start [PoseStamped] The specified start pose
-        :param goal [PoseStamped] The specified goal pose
+        Requests a interpolated spline path of poses given specified waypoints. 
+        :param waypoints [list] The specified PoseStamped list of poses to constraint a spline onto
         :returns a simple spline Path object
         """
         rospy.loginfo("Navigation.py: Requesting simple spline path from \'/quintic_spline_path/simple_spline_plan\' service")
@@ -68,8 +67,13 @@ class Navigation:
         try:
             client = rospy.ServiceProxy("/quintic_spline_path/simple_spline_plan", GetSimpleSplinePlan)
             simple_path = Path()
-            simple_path.poses.append(start)
-            simple_path.poses.append(goal)
+            for waypoint in waypoints:
+                pose = PoseStamped()
+                pose.pose.position.x = waypoint[0]
+                pose.pose.position.y = waypoint[1]
+                pose.pose.orientation = handler.get_orientation(waypoint[2])
+                simple_path.poses.append(pose)
+
             response = client(waypoints_path=simple_path)
             if response is None or response.spline_path is None:
                 rospy.logerr("Navigation.py: error: failed to retrieve simple spline plan service response")
@@ -133,8 +137,26 @@ class Navigation:
         self.setSpeed(0, 0)
 
     def splineDrive(self, spline_path: Path, spline_sd_steps: list, spline_cumulative_sd_steps: list, acceleration: float, max_linear_speed: float, max_angular_speed: float):
-        
+        """
+        Motion profiles and drives wheels speeds along a specified spline path given path poses, path arc distances, along with specified acceleration [m/sec^2], max linear speed [m/sec],
+        and max angular speed [radians/sec]. 
+        :param spline_path [Path] The specified spline path of interpolated poses
+        :param spline_sd_steps [list] The specified list of float arc distances between a given spline path pose and the previous. 
+        :param spline_cumulative_sd_steps [list] The specified list of float cumulative arc distances between a given spline path pose and the starting position. 
+        :param acceleration [float] The specified acceleration in [m/sec^2] to profile by
+        :param max_linear_speed [float] The specified linear speed in [m/sec] to profile by
+        :param max_angular_speed [float] The specified angular speed in [radians/sec] to profile by
+        """
+
         def getPoseIndexByMSE(path: Path, pose: PoseStamped) -> int:
+            """
+            Calculates the pose index along a path the most closely approximates a specified pose. 
+            Approximation is done by considering squared difference between path positions and the specified pose by MSE 
+            to find the index with minimal error. 
+            :param path [Path] The specified path
+            :param pose [PoseStamped] The specified pose to consider
+            :returns the most similar path position to that of the specified pose
+            """
             min_loss = None
             ideal_pose_index = 0
             for i in range(0, len(path.poses)):
@@ -147,7 +169,25 @@ class Navigation:
                     ideal_pose_index = i
             return ideal_pose_index
 
-        def getPoseSpeeds(spline_path: Path, sd_steps: list, acceleration, max_linear_speed: float, max_angular_speed: float) -> tuple[list, list]:
+        def getPathSpeeds(spline_path: Path, sd_steps: list, cumulative_sd_steps: list, acceleration: float, max_linear_speed: float, max_angular_speed: float) -> tuple[list, list]:
+            """
+            Calculates speeds for each pose along a spline path. Linear and angular speeds are are determined given pose data while stepping through 
+            the path to interpolate speeds knowing the specified acceleration. Pose data used come from the i-th pose along the spline, the i-th arc distance 
+            between a pose and the previous on the spline from sd_steps, and the i-th arc distance between the initial position and the i-th pose from cumulative_sd_steps.
+            Motion profiling criteria are taken into account as well. The following being the criteria of linear acceleration [m/sec^2], max linear speed [m/sec], 
+            and max angular speed [radians/sec]; motion criteria clamps speeds within absolution bounderies between zero and the maximums specified and only changes 
+            speeds by the rate of acceleration specified. Finally, speeds are return in the form of a tuple of linear and angular speeds of the same length and 
+            corresponding order of the spline path specified. 
+
+            :param spline_path [Path] The specified spline path to profile speeds for
+            :param sd_steps [list] The specified list of float arc distances between a given pose and the previous on a spline path
+            :param cumulative_sd_steps [list] The specified list of float cumulative arc distances between a given pose and the starting position of a spline path
+            :param acceleration [float] The specified magnitude of acceleration in [m/sec^2] to profile by
+            :param max_linear_speed [float] The specified magnitude of tangential speed in [m/sec] to profile by
+            :param max_angular_speed [float] The specified magnitude of angular speed in [radians/sec] to profile by
+
+            :returns a 2D tuple of linear speeds and angular speeds respectively in the same corresponding order as the spline path specified 
+            """
             tolerance = 1 # how much reach +/- the index to select other points for approximating a spline circle
             base_index = tolerance 
             acceleration = max(0.0001, abs(acceleration)) 
@@ -157,7 +197,7 @@ class Navigation:
             angular_speeds = []
             deccelerate = False
             # iterate through spline waypoints to compute speeds
-            print("remaining distances:")
+            print("R's:")
             for index in range(0, len(spline_path.poses)):
                 # scroll tolerance range while iterating
                 if index > base_index and index <= len(spline_path.poses) - tolerance - 1:
@@ -173,34 +213,34 @@ class Navigation:
                
                 # determine the direction (sign of angular speed (w_sgn)) of which the robot will turn
                 delta_theta = handler.get_heading(p2) - handler.get_heading(p0)
-                w_sgn = delta_theta / max(0.0001, abs(delta_theta))
+                w_sgn = delta_theta / handler.non_zero(abs(delta_theta), 0.00001)
 
                 # compute current waypoint's linear and angular velocity by kinematics
                 v_1 = pow(abs(pow(v_0, 2.0) + 2.0*sd*acceleration), 0.5)
-                w_1 = v_1 / max(0.0001, abs(R)) * w_sgn
+                w_1 = v_1 / handler.non_zero(abs(R), 0.00001) * w_sgn
                 deccel_distance = abs(-pow(v_1, 2.0) / (2.0 * acceleration))
 
                 # check to deccelerate or not: check if remaining spline distance is longer than the distance needed to deccelerate
-                remaining_distance = abs(spline_cumulative_sd_steps[len(spline_cumulative_sd_steps) - 1] - spline_cumulative_sd_steps[index])
+                remaining_distance = abs(cumulative_sd_steps[len(cumulative_sd_steps) - 1] - cumulative_sd_steps[index])
                 remaining_distance = remaining_distance if remaining_distance > 0.05 else 0
-                print(remaining_distance)
+        
                 if not deccelerate and remaining_distance <= deccel_distance:
                     # if just flagged True, the robot must of just noticed its speed, or any faster, would require slowing now to not overshoot the
                     # end of the spline. Once deccelerating, the robot should not wait to slow or ever go faster; don't consider handling those cases.
                     deccelerate = True
-                    acceleration = -abs(acceleration)
+                    #acceleration = -abs(acceleration)
                 if abs(w_1) > abs(max_angular_speed):
                     # the robot must of just met/passed the max angular speed threshold; do not accelerate here but hold constant speed at the max angular speed.
                     w_1 = max_angular_speed * w_sgn
                     v_1 = max_angular_speed * R
                 elif abs(v_1) > abs(max_linear_speed):
                     # the robot must of just met/passed the max linear speed threshold; do not accelerate here but hold constant speed at the max linear speed. 
-                    w_1 = max_linear_speed / max(0.0001, abs(R)) * w_sgn
+                    w_1 = max_linear_speed / handler.non_zero(abs(R), 0.00001) * w_sgn
                     v_1 = max_linear_speed
                 elif deccelerate and remaining_distance > deccel_distance:
                     # if the robot is slowing down to soon stop but find the stop may come too early, then hold speeds constants
+                    w_1 = v_0 / handler.non_zero(abs(R), 0.00001) * w_sgn
                     v_1 = v_0
-                    w_1 = w_0
 
                 # add speeds
                 linear_speeds.append(v_1)
@@ -209,7 +249,7 @@ class Navigation:
             return (linear_speeds, angular_speeds)
 
         # compute wheel speeds
-        speeds = getPoseSpeeds(spline_path, spline_sd_steps, acceleration, max_linear_speed, max_angular_speed)
+        speeds = getPathSpeeds(spline_path, spline_sd_steps, spline_cumulative_sd_steps, acceleration, max_linear_speed, max_angular_speed)
         # print data
         lin_speeds, ang_speeds = speeds[0], speeds[1] 
         print("linear speeds:")
@@ -228,18 +268,23 @@ class Navigation:
         # come to a stop
         self.setSpeed(0, 0)
 
-    def run(self):
+    def driveSplinePath(self, waypoints: list, acceleration: float, max_linear_speed: float, max_angular_speed: float):
+        """
+        Drives a path of splines given waypoints to constrain the spline onto with motion profiling constraints of acceleration [m/sec^2], 
+        max linear speed [m/sec], and max angular speed [radians/sec].
+        :param waypoints [list] The specified list of pose vectors for each waypoint of which the spline path should intersect through
+        :param acceleration [float] The specified acceleration in [m/sec^2] to profile by
+        :param max_linear_speed [float] The specified max linear speed in [m/sec] to profile by
+        :param max_angular_speed [float] The specified max angular speed in [radians/sec] to profile by
+        """
+        # add initial robot position to the front of the waypoints and request interpolated spline path. 
+        waypoints = [(self.current_pose.pose.position.x, self.current_pose.pose.position.y, handler.get_heading(self.current_pose))] + waypoints
+        spline_plan = self.requestSimpleSplinePlan(waypoints)
+        # drive spline given computed spline path and motion profiling constraints. 
+        self.splineDrive(spline_plan[0], spline_plan[1], spline_plan[2], acceleration, max_linear_speed, max_angular_speed)
 
-        goal = PoseStamped()
-        goal.pose.position.x = 4
-        goal.pose.position.y = 2
-        goal.pose.orientation = handler.get_orientation(-math.pi / 4.0)
-        
-        spline_plan = self.requestSimpleSplinePlan(self.current_pose, goal)
-        spline_path = spline_plan[0]
-        spline_sd_steps = spline_plan[1]
-        spline_cumulative_sd_steps = spline_plan[2]
-        self.splineDrive(spline_path, spline_sd_steps, spline_cumulative_sd_steps, 0.5, 0.5, 0.2)
+    def run(self):
+        self.driveSplinePath([(4,2,-math.pi/4.0), (5,0,-math.pi/2.0)], 0.15, 1, 0.5)
         rospy.spin()
 
 if __name__ == "__main__":

@@ -72,7 +72,7 @@ class QuinticSplinePath:
         rospy.init_node("quintic_spline_path", anonymous=True)
         self.node_rate = rospy.Rate(10)
         # matplotlib coordinate range: ((min_x, max_x), (min_y, max_y))
-        self.plot_range = ((-4, 6), (-3, 6))
+        self.plot_range = ((-4, 10), (-3, 10))
 
         self.path_x, self.path_y = None, None
         self.sd_steps, self.cumulative_sd_steps = None, None
@@ -125,6 +125,10 @@ class QuinticSplinePath:
         for p_index in range(1, len(waypoints)):
             p_0 = waypoints[p_index - 1]
             p_1 = waypoints[p_index]
+
+            if p_index > 1:
+                path_x.pop()
+                path_y.pop()
 
             # Find the relative frame of reference by centering the splin on point of origin and a rotation to 
             # parallelize the initial waypoint with the x-axis
