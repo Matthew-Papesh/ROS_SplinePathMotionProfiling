@@ -136,16 +136,17 @@ class Navigation:
             self.node_rate.sleep()
         self.setSpeed(0, 0)
 
-    def splineDrive(self, spline_path: Path, spline_sd_steps: list, spline_cumulative_sd_steps: list, acceleration: float, max_linear_speed: float, max_angular_speed: float):
+    def splineDrive(self, spline_path: Path, spline_sd_steps: list, spline_cumulative_sd_steps: list, acceleration: float, max_linear_speed: float, max_angular_speed: float, max_centripetal_acceleration: float):
         """
         Motion profiles and drives wheels speeds along a specified spline path given path poses, path arc distances, along with specified acceleration [m/sec^2], max linear speed [m/sec],
-        and max angular speed [radians/sec]. 
+        max angular speed [radians/sec], and max centripetal acceleration [m/sec^2]. 
         :param spline_path [Path] The specified spline path of interpolated poses
         :param spline_sd_steps [list] The specified list of float arc distances between a given spline path pose and the previous. 
         :param spline_cumulative_sd_steps [list] The specified list of float cumulative arc distances between a given spline path pose and the starting position. 
         :param acceleration [float] The specified acceleration in [m/sec^2] to profile by
-        :param max_linear_speed [float] The specified linear speed in [m/sec] to profile by
-        :param max_angular_speed [float] The specified angular speed in [radians/sec] to profile by
+        :param max_linear_speed [float] The specified max linear speed in [m/sec] to profile by
+        :param max_angular_speed [float] The specified max angular speed in [radians/sec] to profile by
+        :param max_centripetal_acceleration [float] The specified max centripetal acceleration in [m/sec^2] to profile by
         """
 
         def getPoseIndexByMSE(path: Path, pose: PoseStamped) -> int:
@@ -169,35 +170,36 @@ class Navigation:
                     ideal_pose_index = i
             return ideal_pose_index
 
-        def getPathSpeeds(spline_path: Path, sd_steps: list, cumulative_sd_steps: list, acceleration: float, max_linear_speed: float, max_angular_speed: float) -> tuple[list, list]:
+        def getPathSpeeds(spline_path: Path, sd_steps: list, cumulative_sd_steps: list, acceleration: float, max_linear_speed: float, max_angular_speed: float, max_centripetal_acceleration: float) -> tuple[list, list]:
             """
             Calculates speeds for each pose along a spline path. Linear and angular speeds are are determined given pose data while stepping through 
             the path to interpolate speeds knowing the specified acceleration. Pose data used come from the i-th pose along the spline, the i-th arc distance 
             between a pose and the previous on the spline from sd_steps, and the i-th arc distance between the initial position and the i-th pose from cumulative_sd_steps.
             Motion profiling criteria are taken into account as well. The following being the criteria of linear acceleration [m/sec^2], max linear speed [m/sec], 
-            and max angular speed [radians/sec]; motion criteria clamps speeds within absolution bounderies between zero and the maximums specified and only changes 
-            speeds by the rate of acceleration specified. Finally, speeds are return in the form of a tuple of linear and angular speeds of the same length and 
-            corresponding order of the spline path specified. 
+            max angular speed [radians/sec], and max centripetal acceleration [m/sec^2]; motion criteria clamps speeds within absolution bounderies between zero and 
+            the maximums specified and only changes speeds by the rate of acceleration specified. Finally, speeds are return in the form of a tuple of linear and angular 
+            speeds of the same length and corresponding order of the spline path specified. 
 
             :param spline_path [Path] The specified spline path to profile speeds for
             :param sd_steps [list] The specified list of float arc distances between a given pose and the previous on a spline path
             :param cumulative_sd_steps [list] The specified list of float cumulative arc distances between a given pose and the starting position of a spline path
             :param acceleration [float] The specified magnitude of acceleration in [m/sec^2] to profile by
-            :param max_linear_speed [float] The specified magnitude of tangential speed in [m/sec] to profile by
-            :param max_angular_speed [float] The specified magnitude of angular speed in [radians/sec] to profile by
+            :param max_linear_speed [float] The specified max magnitude of tangential speed in [m/sec] to profile by
+            :param max_angular_speed [float] The specified max magnitude of angular speed in [radians/sec] to profile by
+            :param max_centripetal_acceleration [float] The specified max magnitude of centripetal acceleration in [m/sec^2] to profile by
 
             :returns a 2D tuple of linear speeds and angular speeds respectively in the same corresponding order as the spline path specified 
             """
             tolerance = 1 # how much reach +/- the index to select other points for approximating a spline circle
             base_index = tolerance 
-            acceleration = max(0.0001, abs(acceleration)) 
+            acceleration = max(0.00001, abs(acceleration)) 
 
             # computed speeds
             linear_speeds = []
             angular_speeds = []
             deccelerate = False
             # iterate through spline waypoints to compute speeds
-            print("R's:")
+            print("a_c's:")
             for index in range(0, len(spline_path.poses)):
                 # scroll tolerance range while iterating
                 if index > base_index and index <= len(spline_path.poses) - tolerance - 1:
@@ -210,7 +212,7 @@ class Navigation:
                 v_0 = 0 if index == 0 else linear_speeds[len(linear_speeds) - 1]
                 w_0 = 0 if index == 0 else angular_speeds[len(angular_speeds) - 1]
                 sd = sd_steps[index]
-               
+
                 # determine the direction (sign of angular speed (w_sgn)) of which the robot will turn
                 delta_theta = handler.get_heading(p2) - handler.get_heading(p0)
                 w_sgn = delta_theta / handler.non_zero(abs(delta_theta), 0.00001)
@@ -218,18 +220,24 @@ class Navigation:
                 # compute current waypoint's linear and angular velocity by kinematics
                 v_1 = pow(abs(pow(v_0, 2.0) + 2.0*sd*acceleration), 0.5)
                 w_1 = v_1 / handler.non_zero(abs(R), 0.00001) * w_sgn
+                # compute centripetal acceleration (a_c) and decceleration distance
+                a_c = pow(v_1, 2.0) / handler.non_zero(abs(R), 0.00001)
                 deccel_distance = abs(-pow(v_1, 2.0) / (2.0 * acceleration))
 
                 # check to deccelerate or not: check if remaining spline distance is longer than the distance needed to deccelerate
                 remaining_distance = abs(cumulative_sd_steps[len(cumulative_sd_steps) - 1] - cumulative_sd_steps[index])
                 remaining_distance = remaining_distance if remaining_distance > 0.05 else 0
-        
+
                 if not deccelerate and remaining_distance <= deccel_distance:
                     # if just flagged True, the robot must of just noticed its speed, or any faster, would require slowing now to not overshoot the
                     # end of the spline. Once deccelerating, the robot should not wait to slow or ever go faster; don't consider handling those cases.
                     deccelerate = True
                     acceleration = -abs(acceleration)
-                if abs(w_1) > abs(max_angular_speed):
+                if abs(a_c) > abs(max_centripetal_acceleration):
+                    # the robot must of just met/passed the max centripetal acceleration threshold; do not accelerate here but hold constant speed at the max linear speed.
+                    w_1 = v_0 / handler.non_zero(abs(R), 0.00001) * w_sgn
+                    v_1 = v_0
+                elif abs(w_1) > abs(max_angular_speed):
                     # the robot must of just met/passed the max angular speed threshold; do not accelerate here but hold constant speed at the max angular speed.
                     w_1 = max_angular_speed * w_sgn
                     v_1 = max_angular_speed * R
@@ -242,6 +250,7 @@ class Navigation:
                     w_1 = v_0 / handler.non_zero(abs(R), 0.00001) * w_sgn
                     v_1 = v_0
 
+                print(format(pow(v_1, 2.0) / handler.non_zero(abs(R), 0.00001), '.6'))
                 # add speeds
                 linear_speeds.append(v_1)
                 angular_speeds.append(w_1)
@@ -249,7 +258,7 @@ class Navigation:
             return (linear_speeds, angular_speeds)
 
         # compute wheel speeds
-        speeds = getPathSpeeds(spline_path, spline_sd_steps, spline_cumulative_sd_steps, acceleration, max_linear_speed, max_angular_speed)
+        speeds = getPathSpeeds(spline_path, spline_sd_steps, spline_cumulative_sd_steps, acceleration, max_linear_speed, max_angular_speed, max_centripetal_acceleration)
         # print data
         lin_speeds, ang_speeds = speeds[0], speeds[1] 
         print("linear speeds:")
@@ -268,23 +277,39 @@ class Navigation:
         # come to a stop
         self.setSpeed(0, 0)
 
-    def driveSplinePath(self, waypoints: list, acceleration: float, max_linear_speed: float, max_angular_speed: float):
+    def driveSplinePath(self, waypoints: list, acceleration: float, max_linear_speed: float, max_angular_speed: float, max_centripetal_acceleration: float):
         """
         Drives a path of splines given waypoints to constrain the spline onto with motion profiling constraints of acceleration [m/sec^2], 
-        max linear speed [m/sec], and max angular speed [radians/sec].
+        max linear speed [m/sec], max angular speed [radians/sec], and max centripetal acceleration [m/sec^2].
         :param waypoints [list] The specified list of pose vectors for each waypoint of which the spline path should intersect through
         :param acceleration [float] The specified acceleration in [m/sec^2] to profile by
         :param max_linear_speed [float] The specified max linear speed in [m/sec] to profile by
         :param max_angular_speed [float] The specified max angular speed in [radians/sec] to profile by
+        :param max_centripetal_acceleration [float] The specified max centripetal acceleration in [m/sec^2] to profile by
         """
         # add initial robot position to the front of the waypoints and request interpolated spline path. 
         waypoints = [(self.current_pose.pose.position.x, self.current_pose.pose.position.y, handler.get_heading(self.current_pose))] + waypoints
         spline_plan = self.requestSimpleSplinePlan(waypoints)
         # drive spline given computed spline path and motion profiling constraints. 
-        self.splineDrive(spline_plan[0], spline_plan[1], spline_plan[2], acceleration, max_linear_speed, max_angular_speed)
+        self.splineDrive(spline_plan[0], spline_plan[1], spline_plan[2], acceleration, max_linear_speed, max_angular_speed, max_centripetal_acceleration)
 
     def run(self):
-        self.driveSplinePath([(4,2,-math.pi/4.0), (5,1,-math.pi/2.0), (4, 0, -math.pi*3.0/4.0), (0, 0, math.pi)], 0.03, 0.3, 0.8)
+        # absolute maximum centripetal acceleration given simulation physics
+        coeff_static_friction = 1.0
+        centripetal_acceleration = coeff_static_friction * 9.81 # [m/sec^2]
+        # percentage of centripetal acceleration to consider when specifying max centripetal acceleration for spline path driving
+        scaler = 0.3
+        
+        # other motion profiling constraints:
+        acceleration = 0.1 # [m/sec^2]
+        max_angular_speed = 1.0 # [radians/sec]
+        max_linear_speed = 0.25 # [m/sec]
+        
+        # waypoints to travel through along spline path: (waypoint = (x, y, radians))
+        waypoints = [(4,2,-math.pi/4.0), (5,1,-math.pi/2.0), (4, 0, -math.pi*3.0/4.0), (0, 0, math.pi)]
+
+        # drive spline and spin ROS node
+        self.driveSplinePath(waypoints, acceleration, max_angular_speed, max_linear_speed, centripetal_acceleration * scaler)
         rospy.spin()
 
 if __name__ == "__main__":
