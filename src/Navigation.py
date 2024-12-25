@@ -149,18 +149,20 @@ class Navigation:
         :param max_centripetal_acceleration [float] The specified max centripetal acceleration in [m/sec^2] to profile by
         """
 
-        def getPoseIndexByMSE(path: Path, pose: PoseStamped) -> int:
+        def getPoseIndexByMSE(path: Path, pose: PoseStamped, kernel_index: int, padding: int) -> int:
             """
             Calculates the pose index along a path the most closely approximates a specified pose. 
             Approximation is done by considering squared difference between path positions and the specified pose by MSE 
             to find the index with minimal error. 
             :param path [Path] The specified path
             :param pose [PoseStamped] The specified pose to consider
+            :param kernel_index [int] The specified position of the kernel or scope to evaluate 
+            :param padding [int] The specified radius of the kernel or scope to evaluate
             :returns the most similar path position to that of the specified pose
             """
             min_loss = None
-            ideal_pose_index = 0
-            for i in range(0, len(path.poses)):
+            ideal_pose_index = 0 
+            for i in range(max(0, kernel_index - padding), min(kernel_index + padding + 1, len(spline_path.poses))):
                 path_pose = path.poses[i]
                 x_loss = pow(path_pose.pose.position.x - pose.pose.position.x, 2.0)
                 y_loss = pow(path_pose.pose.position.y - pose.pose.position.y, 2.0)
@@ -199,7 +201,6 @@ class Navigation:
             angular_speeds = []
             deccelerate = False
             # iterate through spline waypoints to compute speeds
-            print("a_c's:")
             for index in range(0, len(spline_path.poses)):
                 # scroll tolerance range while iterating
                 if index > base_index and index <= len(spline_path.poses) - tolerance - 1:
@@ -210,7 +211,6 @@ class Navigation:
                 
                 # determine initial velocity (v_0) and arc distance (sd) coming from previous waypoint to the current
                 v_0 = 0 if index == 0 else linear_speeds[len(linear_speeds) - 1]
-                w_0 = 0 if index == 0 else angular_speeds[len(angular_speeds) - 1]
                 sd = sd_steps[index]
 
                 # determine the direction (sign of angular speed (w_sgn)) of which the robot will turn
@@ -250,7 +250,6 @@ class Navigation:
                     w_1 = v_0 / handler.non_zero(abs(R), 0.00001) * w_sgn
                     v_1 = v_0
 
-                print(format(pow(v_1, 2.0) / handler.non_zero(abs(R), 0.00001), '.6'))
                 # add speeds
                 linear_speeds.append(v_1)
                 angular_speeds.append(w_1)
@@ -270,9 +269,9 @@ class Navigation:
         print("spline start: " + str(len(spline_path.poses)))
         
         # drive robot with speed data
-        index = 0
+        index, padding = 0, 50
         while index < len(spline_path.poses) - 1:
-            index = getPoseIndexByMSE(spline_path, self.current_pose)
+            index = getPoseIndexByMSE(spline_path, self.current_pose, index, padding)
             self.setSpeed(abs(lin_speeds[index]), ang_speeds[index])
         # come to a stop
         self.setSpeed(0, 0)
@@ -298,12 +297,12 @@ class Navigation:
         coeff_static_friction = 1.0
         centripetal_acceleration = coeff_static_friction * 9.81 # [m/sec^2]
         # percentage of centripetal acceleration to consider when specifying max centripetal acceleration for spline path driving
-        scaler = 0.3
+        scaler = 0.8
         
         # other motion profiling constraints:
         acceleration = 0.1 # [m/sec^2]
-        max_angular_speed = 1.0 # [radians/sec]
-        max_linear_speed = 0.25 # [m/sec]
+        max_angular_speed = 0.8 # [radians/sec]
+        max_linear_speed = 0.15 # [m/sec]
         
         # waypoints to travel through along spline path: (waypoint = (x, y, radians))
         waypoints = [(4,2,-math.pi/4.0), (5,1,-math.pi/2.0), (4, 0, -math.pi*3.0/4.0), (0, 0, math.pi)]
