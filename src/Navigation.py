@@ -2,7 +2,7 @@
 from __future__ import annotations
 from ROS_SplinePathMotionProfiling.srv import GetSimpleSplinePlan
 from geometry_msgs.msg import PoseStamped, Twist
-from nav_msgs.msg import Odometry, Path
+from nav_msgs.msg import Odometry, Path, GridCells
 import rospy
 import handler
 import math
@@ -19,6 +19,7 @@ class Navigation:
         self.current_pose = PoseStamped()
 
         # publishers and subscribers
+        self.spline_gridcells_publisher = None
         self.cmd_vel_publisher = None
         self.cmd_vel_subscriber = None
 
@@ -33,6 +34,7 @@ class Navigation:
         """
         Initializes and creates all node publishers.
         """
+        self.spline_gridcells_publisher = rospy.Publisher("/navigation/spline_gridcells", GridCells, queue_size=10)
         self.cmd_vel_publisher = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
 
     def initSubscribers(self):
@@ -271,9 +273,17 @@ class Navigation:
         print("spline start: " + str(len(spline_path.poses)))
         
         # drive robot with speed data
-        index, padding = 0, 50
+        index, padding = 0, 5
         while index < len(spline_path.poses) - 1:
             index = getPoseIndexByMSE(spline_path, self.current_pose, index, padding)
+            padding_x, padding_y = [], []
+            for kernel_i in range(-padding, padding + 1):
+                clamped_kernel_i = max(0, kernel_i + index)
+                padding_x.append(spline_path.poses[clamped_kernel_i].pose.position.x)
+                padding_y.append(spline_path.poses[clamped_kernel_i].pose.position.y)
+            gridcells = handler.get_gridcells((0,0), 1.0, padding_x, padding_y)
+            self.spline_gridcells_publisher.publish(gridcells)
+
             delta_theta = handler.get_heading(spline_path.poses[index]) - handler.get_heading(self.current_pose)            
             self.setSpeed(abs(speeds[0][index]), speeds[1][index])
         # come to a stop
@@ -303,9 +313,9 @@ class Navigation:
         scaler = 0.8
         
         # other motion profiling constraints:
-        acceleration = 0.05 # [m/sec^2]
-        max_angular_speed = 1.5 # [radians/sec]
-        max_linear_speed = 0.2 # [m/sec]
+        acceleration = 0.01 # [m/sec^2]
+        max_angular_speed = 2 # [radians/sec]
+        max_linear_speed = 1.15 # [m/sec]
         
         # waypoints to travel through along spline path: (waypoint = (x, y, radians))
         waypoints = [(4,2,-math.pi/4.0), (5,1,-math.pi/2.0), (4, 0, -math.pi*3.0/4.0), (0, 0, math.pi)]

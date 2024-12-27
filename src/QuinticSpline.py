@@ -161,7 +161,9 @@ class QuinticSplinePath:
             # Compute the relative quintic spline function
             q = Quintic(p_origin, p_rel)
             # The specified number of points to partition and interpolate
-            partitions = 200
+            partition_density = 50.0 
+            euclid_distance = handler.euclid_distance((0.0, 0.0), (rel_x, rel_y))
+            partitions = int(euclid_distance * partition_density)
             # The amount to step by through x-domain when interpolating
             partition = rel_x / partitions
             # The initial arc distance for the current spline along the path; the spline created between two waypoints such that
