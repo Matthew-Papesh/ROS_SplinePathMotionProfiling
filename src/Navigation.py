@@ -172,7 +172,7 @@ class Navigation:
                     ideal_pose_index = i
             return ideal_pose_index
 
-        def getPathSpeeds(spline_path: Path, sd_steps: list, cumulative_sd_steps: list, acceleration: float, max_linear_speed: float, max_angular_speed: float, max_centripetal_acceleration: float) -> tuple[list, list]:
+        def getPathSpeeds(spline_path: Path, sd_steps: list, cumulative_sd_steps: list, acceleration: float, max_linear_speed: float, max_angular_speed: float, max_centripetal_acceleration: float) -> tuple[list, list, list]:
             """
             Calculates speeds for each pose along a spline path. Linear and angular speeds are are determined given pose data while stepping through 
             the path to interpolate speeds knowing the specified acceleration. Pose data used come from the i-th pose along the spline, the i-th arc distance 
@@ -199,6 +199,7 @@ class Navigation:
             # computed speeds
             linear_speeds = []
             angular_speeds = []
+            radius = []
             deccelerate = False
             # iterate through spline waypoints to compute speeds
             for index in range(0, len(spline_path.poses)):
@@ -253,8 +254,9 @@ class Navigation:
                 # add speeds
                 linear_speeds.append(v_1)
                 angular_speeds.append(w_1)
+                radius.append(R)
       
-            return (linear_speeds, angular_speeds)
+            return (linear_speeds, angular_speeds, radius)
 
         # compute wheel speeds
         speeds = getPathSpeeds(spline_path, spline_sd_steps, spline_cumulative_sd_steps, acceleration, max_linear_speed, max_angular_speed, max_centripetal_acceleration)
@@ -272,7 +274,8 @@ class Navigation:
         index, padding = 0, 50
         while index < len(spline_path.poses) - 1:
             index = getPoseIndexByMSE(spline_path, self.current_pose, index, padding)
-            self.setSpeed(abs(lin_speeds[index]), ang_speeds[index])
+            delta_theta = handler.get_heading(spline_path.poses[index]) - handler.get_heading(self.current_pose)            
+            self.setSpeed(abs(speeds[0][index]), speeds[1][index])
         # come to a stop
         self.setSpeed(0, 0)
 
@@ -300,9 +303,9 @@ class Navigation:
         scaler = 0.8
         
         # other motion profiling constraints:
-        acceleration = 0.1 # [m/sec^2]
-        max_angular_speed = 0.8 # [radians/sec]
-        max_linear_speed = 0.15 # [m/sec]
+        acceleration = 0.05 # [m/sec^2]
+        max_angular_speed = 1.5 # [radians/sec]
+        max_linear_speed = 0.2 # [m/sec]
         
         # waypoints to travel through along spline path: (waypoint = (x, y, radians))
         waypoints = [(4,2,-math.pi/4.0), (5,1,-math.pi/2.0), (4, 0, -math.pi*3.0/4.0), (0, 0, math.pi)]

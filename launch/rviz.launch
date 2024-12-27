@@ -2,5 +2,6 @@
     <arg name="setup" default="$(find ROS_SplinePathMotionProfiling)/config/rviz_setup.rviz"/>
     <node name="rviz" pkg="rviz" type="rviz" args="-d $(arg setup)" output="screen"/>
 
-    <param name="robot_description" command="xacro $(find turtlebot3_description)/urdf/turtlebot3_burger.urdf.xacro"/> 
+    <param name="robot_description" command="xacro $(find turtlebot3_description)/urdf/turtlebot3_burger.urdf.xacro"/>
+    <node pkg="tf" type="static_transform_publisher" name="map_to_odom" args="0 0 0 0 0 0 map odom 100"/>
 </launch>

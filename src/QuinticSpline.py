@@ -5,9 +5,13 @@ import math
 import handler
 
 from ROS_SplinePathMotionProfiling.srv import GetSimpleSplinePlan, GetSimpleSplinePlanResponse
-
+from nav_msgs.msg import GridCells
 from geometry_msgs.msg import PoseStamped
 import rospy
+
+# plotting flags
+RVIZ_PLOT_GRIDCELLS = True
+MATPLOTLIB_PLOT_QUINTIC = True
 
 # Represents the relative quintic function to compute subpoints from 
 class Quintic:
@@ -74,8 +78,12 @@ class QuinticSplinePath:
         # matplotlib coordinate range: ((min_x, max_x), (min_y, max_y))
         self.plot_range = ((-4, 10), (-3, 10))
 
+        # path data:
         self.path_x, self.path_y = None, None
         self.sd_steps, self.cumulative_sd_steps = None, None
+
+        # publishers and subscribers:
+        self.spline_gridcells_publisher = None
 
         self.initPublishers()
         self.initSubscribers()
@@ -85,7 +93,7 @@ class QuinticSplinePath:
         """
         Initializes and creates all node publishers.
         """
-        pass
+        self.spline_gridcells_publisher = rospy.Publisher("/quintic_spline_path/spline_gridcells", GridCells, queue_size=10)
     def initSubscribers(self):
         """
         Initializes and creates all node subscribers. 
@@ -101,6 +109,7 @@ class QuinticSplinePath:
         simple_path = request.waypoints_path
         spline_path_points = self.getInterpolatedSpline(simple_path.poses)
         spline_path = handler.get_path((0, 0), 1.0, spline_path_points[0], spline_path_points[1])
+        self.plotGridcells(self.path_x, self.path_y, RVIZ_PLOT_GRIDCELLS)
         
         return GetSimpleSplinePlanResponse(spline_path=spline_path, sd_steps=spline_path_points[2], cumulative_sd_steps=spline_path_points[3])
 
@@ -117,6 +126,11 @@ class QuinticSplinePath:
             plt.axis("square")
             plt.grid(visible=True)
             plt.show()
+
+    def plotGridcells(self, path_x: list, path_y: list, plot: bool) :
+        if plot:
+            gridcells = handler.get_gridcells((0, 0), 1.0, path_x, path_y)
+            self.spline_gridcells_publisher.publish(gridcells)
 
     def getInterpolatedSpline(self, waypoints: list[PoseStamped]) -> tuple[list, list, list, list]:
         # Create subpoint lists
@@ -147,7 +161,7 @@ class QuinticSplinePath:
             # Compute the relative quintic spline function
             q = Quintic(p_origin, p_rel)
             # The specified number of points to partition and interpolate
-            partitions = 100
+            partitions = 200
             # The amount to step by through x-domain when interpolating
             partition = rel_x / partitions
             # The initial arc distance for the current spline along the path; the spline created between two waypoints such that
@@ -178,7 +192,8 @@ class QuinticSplinePath:
         simple_spline_service = rospy.Service("/quintic_spline_path/simple_spline_plan", GetSimpleSplinePlan, self.handleSplinePlanService)
         while not rospy.is_shutdown():
             if self.path_x is not None and self.path_y is not None:
-                self.plot(self.path_x, self.path_y, True)
+                self.plotGridcells(self.path_x, self.path_y, RVIZ_PLOT_GRIDCELLS)
+                self.plot(self.path_x, self.path_y, MATPLOTLIB_PLOT_QUINTIC)
                 self.path_x = None
                 self.path_y = None
             self.node_rate.sleep()

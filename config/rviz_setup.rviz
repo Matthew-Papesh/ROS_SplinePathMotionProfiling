@@ -4,12 +4,12 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
-        - /Global Options1
-        - /Status1
-        - /Grid1
-        - /RobotModel1
         - /TF1
         - /TF1/Frames1
+        - /TF1/Tree1
+        - /TF1/Tree1/odom1
+        - /TF1/Tree1/odom1/base_footprint1
+        - /GridCells1
       Splitter Ratio: 0.6029411554336548
     Tree Height: 651
   - Class: rviz/Selection
@@ -28,7 +28,7 @@ Panels:
     Splitter Ratio: 0.5
   - Class: rviz/Time
     Name: Time
-    SyncMode: 3
+    SyncMode: 0
     SyncSource: LaserScan
 Preferences:
   PromptSaveOnExit: true
@@ -190,6 +190,15 @@ Visualization Manager:
             {}
       Update Interval: 0
       Value: true
+    - Alpha: 1
+      Class: rviz/GridCells
+      Color: 25; 255; 0
+      Enabled: true
+      Name: GridCells
+      Queue Size: 10
+      Topic: /quintic_spline_path/spline_gridcells
+      Unreliable: false
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 108; 108; 108
@@ -218,7 +227,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/XYOrbit
-      Distance: 6.704920291900635
+      Distance: 7.617586135864258
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -226,17 +235,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 1.9470518827438354
-        Y: -0.5366575121879578
+        X: 0.20262651145458221
+        Y: -0.23441165685653687
         Z: -5.960464477539062e-07
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.8603979349136353
+      Pitch: 0.6797966361045837
       Target Frame: <Fixed Frame>
-      Yaw: 4.613602161407471
+      Yaw: 4.448605537414551
     Saved: ~
 Window Geometry:
   Displays:

@@ -76,14 +76,14 @@ def get_gridcells(origin: tuple[float, float], resolution: float, map_x_coords: 
     returns: a gridcells type of the specified map coordinates 
     """
     gridcells = GridCells()
-    gridcells.cell_width = resolution
-    gridcells.cell_height = resolution
+    gridcells.cell_width = 0.05
+    gridcells.cell_height = 0.05
     gridcells.header.frame_id = "map"
     count = min(len(map_x_coords), len(map_y_coords))
     for i in range(0, count):
         cell = Point()
-        cell.x = origin[0] + map_x_coords[i] * resolution
-        cell.y = origin[1] + map_y_coords[i] * resolution
+        cell.x = origin[0] + float(map_x_coords[i]) * resolution
+        cell.y = origin[1] + float(map_y_coords[i]) * resolution
         gridcells.cells.append(cell)
     return gridcells
 
