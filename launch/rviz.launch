@@ -1,0 +1,6 @@
+<launch>
+    <arg name="setup" default="$(find ROS_SplinePathMotionProfiling)/config/rviz_setup.rviz"/>
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(arg setup)" output="screen"/>
+
+    <param name="robot_description" command="xacro $(find turtlebot3_description)/urdf/turtlebot3_burger.urdf.xacro"/> 
+</launch>

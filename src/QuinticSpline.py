@@ -100,7 +100,7 @@ class QuinticSplinePath:
         rospy.loginfo("QuinticSpline.py: GetSplinePlan service request heard")
         simple_path = request.waypoints_path
         spline_path_points = self.getInterpolatedSpline(simple_path.poses)
-        spline_path = handler.get_path(spline_path_points[0], spline_path_points[1])
+        spline_path = handler.get_path((0, 0), 1.0, spline_path_points[0], spline_path_points[1])
         
         return GetSimpleSplinePlanResponse(spline_path=spline_path, sd_steps=spline_path_points[2], cumulative_sd_steps=spline_path_points[3])
 
