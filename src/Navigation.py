@@ -273,19 +273,34 @@ class Navigation:
         print("spline start: " + str(len(spline_path.poses)))
         
         # drive robot with speed data
-        index, padding = 0, 5
+        index, padding = 0, 10
         while index < len(spline_path.poses) - 1:
+            # approximate position by MSE
             index = getPoseIndexByMSE(spline_path, self.current_pose, index, padding)
+            
+            # visualize padded local area considered for MSE; visualize by gridcells
             padding_x, padding_y = [], []
             for kernel_i in range(-padding, padding + 1):
-                clamped_kernel_i = max(0, kernel_i + index)
-                padding_x.append(spline_path.poses[clamped_kernel_i].pose.position.x)
-                padding_y.append(spline_path.poses[clamped_kernel_i].pose.position.y)
+                try:
+                    # exception handling for out-of-bounds errors
+                    padding_x.append(spline_path.poses[kernel_i + index].pose.position.x)
+                    padding_y.append(spline_path.poses[kernel_i + index].pose.position.y)
+                except:
+                    continue
             gridcells = handler.get_gridcells((0,0), 1.0, padding_x, padding_y)
             self.spline_gridcells_publisher.publish(gridcells)
 
-            delta_theta = handler.get_heading(spline_path.poses[index]) - handler.get_heading(self.current_pose)            
-            self.setSpeed(abs(speeds[0][index]), speeds[1][index])
+            # compute speeds
+            error = handler.get_heading(spline_path.poses[index]) - handler.get_heading(self.current_pose)
+            kp = 0.05
+            output = kp * error 
+
+            diff_angular_speed = output
+            ang_speed = speeds[1][index] + diff_angular_speed
+            lin_speed = (abs(speeds[0][index]) + abs(ang_speed) * speeds[2][index]) / 2.0
+            
+            #print("lin speed: " + str(format(lin_speed, '.4')) + " [m/sec], ang speed: " + str(format(ang_speed * 180.0/3.141 , '.4')) + " [deg/sec]")
+            self.setSpeed(lin_speed, ang_speed)
         # come to a stop
         self.setSpeed(0, 0)
 
@@ -313,9 +328,9 @@ class Navigation:
         scaler = 0.8
         
         # other motion profiling constraints:
-        acceleration = 0.01 # [m/sec^2]
-        max_angular_speed = 2 # [radians/sec]
-        max_linear_speed = 1.15 # [m/sec]
+        acceleration = 0.015 # [m/sec^2]
+        max_angular_speed = 1.0 # [radians/sec]
+        max_linear_speed = 1.0 # [m/sec]
         
         # waypoints to travel through along spline path: (waypoint = (x, y, radians))
         waypoints = [(4,2,-math.pi/4.0), (5,1,-math.pi/2.0), (4, 0, -math.pi*3.0/4.0), (0, 0, math.pi)]
