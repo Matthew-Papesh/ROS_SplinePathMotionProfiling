@@ -107,6 +107,18 @@ def non_zero(x: float, tolerance: float):
     sgn = 1.0 if x >= 0 else -1.0
     return magnitude * sgn
 
+def rotate(x: float, y: float, radians: float) -> tuple[float, float]:
+    """
+    Computes a rotational transformation on a vector (x,y) about the origin with the radians specified. 
+    :param x [float] The specified x
+    :param y [float] The specified y
+    :param radians [float] The specified radians to rotate
+    :returns the rotated vector
+    """
+    x_prime = x*math.cos(radians) - y*math.sin(radians)
+    y_prime = x*math.sin(radians) + y*math.cos(radians) 
+    return (x_prime, y_prime)
+
 def get_circle(p_0: tuple[float, float], p_1: tuple[float, float], p_2: tuple[float, float]) -> tuple[float, float, float]:
     """
     Calculates a constrained circle given three specified positions in 2D space. 

@@ -4,12 +4,12 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
+        - /RobotModel1
         - /TF1
         - /TF1/Frames1
         - /TF1/Tree1
-        - /TF1/Tree1/odom1
-        - /TF1/Tree1/odom1/base_footprint1
         - /GridCells1
+        - /GridCells2
       Splitter Ratio: 0.6029411554336548
     Tree Height: 651
   - Class: rviz/Selection
@@ -153,13 +153,15 @@ Visualization Manager:
         base_link:
           Value: false
         base_scan:
-          Value: false
+          Value: true
         camera_link:
           Value: false
         caster_back_link:
           Value: false
         imu_link:
           Value: false
+        map:
+          Value: true
         odom:
           Value: false
         wheel_left_link:
@@ -173,30 +175,40 @@ Visualization Manager:
       Show Axes: true
       Show Names: false
       Tree:
-        odom:
-          base_footprint:
-            base_link:
-              base_scan:
-                {}
-              caster_back_link:
-                {}
-              imu_link:
-                {}
-              wheel_left_link:
-                {}
-              wheel_right_link:
-                {}
-          camera_link:
-            {}
+        map:
+          odom:
+            base_footprint:
+              base_link:
+                base_scan:
+                  {}
+                caster_back_link:
+                  {}
+                imu_link:
+                  {}
+                wheel_left_link:
+                  {}
+                wheel_right_link:
+                  {}
+            camera_link:
+              {}
       Update Interval: 0
       Value: true
-    - Alpha: 1
+    - Alpha: 0.10000000149011612
       Class: rviz/GridCells
       Color: 25; 255; 0
       Enabled: true
       Name: GridCells
       Queue Size: 10
       Topic: /quintic_spline_path/spline_gridcells
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Class: rviz/GridCells
+      Color: 225; 55; 0
+      Enabled: true
+      Name: GridCells
+      Queue Size: 10
+      Topic: /navigation/spline_gridcells
       Unreliable: false
       Value: true
   Enabled: true
@@ -227,7 +239,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/XYOrbit
-      Distance: 7.617586135864258
+      Distance: 2.455714702606201
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -235,17 +247,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 0.20262651145458221
-        Y: -0.23441165685653687
-        Z: -5.960464477539062e-07
+        X: 1.5427128076553345
+        Y: -0.6811407804489136
+        Z: 2.384185791015625e-06
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.6797966361045837
+      Pitch: 1.5697963237762451
       Target Frame: <Fixed Frame>
-      Yaw: 4.448605537414551
+      Yaw: 4.593586444854736
     Saved: ~
 Window Geometry:
   Displays:
