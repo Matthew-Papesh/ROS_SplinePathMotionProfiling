@@ -62,7 +62,9 @@ catkin_python_setup()
 ## Generate services in the 'srv' folder
  add_service_files(
    FILES
-   GetSimpleSplinePlan.srv
+   GetSimpleSplinePlan.srv 
+   GetNavSimTest.srv
+   GetNavCriteriaPlan.srv
  )
 
 ## Generate actions in the 'action' folder

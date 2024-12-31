@@ -1,0 +1,5 @@
+float64 acceleration
+float64 max_linear_speed
+float64 max_angular_speed
+float64 max_centripetal_acceleration
+---
