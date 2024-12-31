@@ -2,6 +2,9 @@
 import rospy
 from std_srvs.srv import Empty
 from ROS_SplinePathMotionProfiling.srv import GetNavCriteriaPlan, GetNavSimTest
+from PIDTuner import PIDTuner
+from gazebo_msgs.srv import SetModelState
+from gazebo_msgs.msg import ModelState
 
 class NavAnalyzer: 
 
@@ -84,6 +87,40 @@ class NavAnalyzer:
             rospy.logerr("NavAnalyzer.py: exception thrown: service call failed => exception: " + e.__str__())
         return None
             
+    def resetRobot(self):
+        """
+        Resets robot position and speeds.
+        """
+        rospy.loginfo("NavAnalyzer.py: Requesting robot reset in Gazebo from \'/gazebo/set_model_state'\' service")
+        rospy.wait_for_service("/gazebo/set_model_state")
+        try: 
+            client = rospy.ServiceProxy("/gazebo/set_model_state", SetModelState)
+            # Define the new state
+            state_msg = ModelState()
+            state_msg.model_name = 'robot' 
+            state_msg.pose.position.x = 0.0
+            state_msg.pose.position.y = 0.0
+            state_msg.pose.position.z = 0.0
+            state_msg.pose.orientation.x = 0.0
+            state_msg.pose.orientation.y = 0.0
+            state_msg.pose.orientation.z = 0.0
+            state_msg.pose.orientation.w = 1.0
+            state_msg.twist.linear.x = 0.0
+            state_msg.twist.linear.y = 0.0
+            state_msg.twist.linear.z = 0.0
+            state_msg.twist.angular.x = 0.0
+            state_msg.twist.angular.y = 0.0
+            state_msg.twist.angular.z = 0.0
+            state_msg.reference_frame = 'world'
+
+            response = client(state_msg)
+            if response is None:
+                rospy.logerr("NavAnalyzer.py: error: failed to reset robot state with service")
+                exit()
+            rospy.loginfo("NavAnalyzer.py: robot reset service ended successfully")
+        except rospy.ServiceException as e:
+            rospy.logerr("NavAnalyzer.py: exception thrown: service call failed => exception: " + e.__str__())
+
     def resetGazebo(self):
         """
         Requests a Gazebo World Simulation.
@@ -96,15 +133,42 @@ class NavAnalyzer:
             if response is None:
                 rospy.logerr("NavAnalyzer.py: error: failed to retrieve world reset service response")
                 exit()
-            rospy.loginfo("NavAnalyzer.py: world reset service ended")
+            rospy.loginfo("NavAnalyzer.py: world reset service ended successfuly")
         except rospy.ServiceException as e:
             rospy.logerr("NavAnalyzer.py: exception thrown: service call failed => exception: " + e.__str__())
 
     def run(self):
-        self.resetGazebo()
+        # initialize profiling criteria
         self.configureNavMotionProfilingCriteria(self.ACCELERATION, self.MAX_LINEAR_SPEED, self.MAX_ANGULAR_SPEED, self.MAX_CENTRIPETAL_ACCELERATION)
-        pos_err, ang_err = self.requestNavSimTest(lin_kp=self.LIN_KP, lin_ki=self.LIN_KI, lin_kd=self.LIN_KD, ang_kp=self.ANG_KP, ang_ki=self.ANG_KI, ang_kd=self.ANG_KD)
-        print("Position error: " + str(pos_err) + ", heading error: " + str(ang_err))
+
+        count = 0
+        def angular_pid_test(kp: float, ki: float, kd: float) -> float:
+            self.resetGazebo()
+            rospy.sleep(1)
+            pos_err, ang_err = self.requestNavSimTest(lin_kp=self.LIN_KP, lin_ki=self.LIN_KI, lin_kd=self.LIN_KD, ang_kp=kp, ang_ki=ki, ang_kd=kd)
+            error = (pos_err + ang_err) / 2.0
+            print(str(count) + " - ANG: Position error: " + format(100.0*pos_err, '.3') + "%, Heading error: " + format(100.0*ang_err, '.3') + "%")
+            return error
+        
+        def linear_pid_test(kp: float, ki: float, kd: float) -> float:
+            self.resetGazebo()
+            rospy.sleep(1)
+            pos_err, ang_err = self.requestNavSimTest(lin_kp=kp, lin_ki=ki, lin_kd=kd, ang_kp=self.ANG_KP, ang_ki=self.ANG_KI, ang_kd=self.ANG_KD)
+            error = (pos_err + ang_err) / 2.0
+            print(str(count) + " - LIN: Position error: " + format(100.0*pos_err, '.3') + "%, Heading error: " + format(100.0*ang_err, '.3') + "%")
+            return error
+        
+        angular_pid_tuner = PIDTuner(self.ANG_KP, self.ANG_KI, self.ANG_KD, 3.0, 0.01, 5.0, angular_pid_test)
+        linear_pid_tuner = PIDTuner(self.LIN_KP, self.LIN_KI, self.LIN_KD, 1.0, 0.0, 1.0, linear_pid_test)
+
+        # tune coefficients
+        self.ANG_KP, self.ANG_KI, self.ANG_KD = angular_pid_tuner.tune(10, 10, 10, False)
+        count = 0
+        self.LIN_KP, self.LIN_KI, self.LIN_KD = linear_pid_tuner.tune(10, 10, 10, False)
+        
+        print("Found Coefficients: ")
+        print("Angular: kp = " + format(self.ANG_KP, '.4') + ", ki = " + format(self.ANG_KI, '.4') + ", kd = " + format(self.ANG_KD, '.4'))
+        print("Linear: kp = " + format(self.LIN_KP, '.4') + ", ki = " + format(self.LIN_KI, '.4') + ", kd = " + format(self.LIN_KD, '.4'))
         rospy.spin()
 
 if __name__ == "__main__":

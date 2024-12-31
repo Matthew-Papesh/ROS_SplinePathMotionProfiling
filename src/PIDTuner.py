@@ -158,7 +158,7 @@ class PIDTuner:
             for error in error_data:
                 file.write(str(error))
 
-    def tune(self, kp_epochs: int, ki_epochs: int, kd_epochs: int, log_error: bool) -> tuple[float, float, float]:
+    def tune(self, kp_epochs: int, ki_epochs: int, kd_epochs: int, log_error: bool):
         """
         Tunes PID controller while stepping through each coefficient for tuning by at most the number of epochs specified for 
         each respective coefficient; writes recorded error to logging file if specified to. 
