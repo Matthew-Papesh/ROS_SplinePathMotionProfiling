@@ -5,6 +5,7 @@ from gazebo_msgs.msg import ODEPhysics
 from geometry_msgs.msg import Vector3
 
 class SimulationSpeed:
+
     def __init__(self):
         # initialize node
         rospy.init_node("simulation_speed", anonymous=True)

@@ -13,6 +13,10 @@ class NavAnalyzer:
     # Position error: 0.0001606594634831609, heading error: 0.29074097147422684
     # Position error: 0.0001448117502408014, heading error: 0.4874795499346864
 
+    # Sim Test Results (NMSE):
+    # Position error: 0.059612820585739454, heading error: 0.01233413721252712
+
+
     def __init__(self):
         # initialize node
         rospy.init_node("nav_analyzer", anonymous=True)

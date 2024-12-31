@@ -325,7 +325,8 @@ class Navigation:
         min_error, recorded_pose, frontier_index = None, None, -1
         MSE_position_error = 0.0 # MSE of overall path by position (x,y)
         MSE_heading_error = 0.0 # MSE of overall path by heading (radians)
-
+        max_position_error = 0.0 # max position error recorded 
+        max_heading_error = 0.0 # max heading error recorded
         # drive robot with speed data and feedback control
         while index < len(spline_path.poses) - 1:
             # approximate position by MSE
@@ -336,8 +337,12 @@ class Navigation:
             if index > frontier_index:
                 if recorded_pose is not None:
                     recorded_path.poses.append(recorded_pose)
+                    heading_error = pow(handler.get_heading(recorded_pose) - handler.get_heading(spline_path.poses[frontier_index]), 2.0)
                     MSE_position_error += error # add an error term to sum for MSE calculation
-                    MSE_heading_error += pow(handler.get_heading(recorded_pose) - handler.get_heading(spline_path.poses[frontier_index]), 2.0)
+                    MSE_heading_error += heading_error
+                    max_position_error = max(max_position_error, error) # compute maximums
+                    max_heading_error = max(max_heading_error, heading_error)
+
                 min_error = error
                 recorded_pose = self.current_pose
                 frontier_index = index
@@ -356,8 +361,8 @@ class Navigation:
 
         # come to a stop and return data
         self.setSpeed(0, 0)
-        MSE_position_error /= len(recorded_path.poses)
-        MSE_heading_error /= len(recorded_path.poses)
+        MSE_position_error = (MSE_position_error / len(recorded_path.poses)) / max_position_error
+        MSE_heading_error = (MSE_heading_error / len(recorded_path.poses)) / max_heading_error
         return (recorded_path, MSE_position_error, MSE_heading_error)
 
     def driveSplinePath(self, waypoints: list, acceleration: float, max_linear_speed: float, max_angular_speed: float, max_centripetal_acceleration: float) -> tuple[Path, float, float]:
@@ -378,22 +383,6 @@ class Navigation:
         # drive spline given computed spline path and motion profiling constraints. 
         recorded_path, MSE_position, MSE_heading = self.splineDrive(spline_plan[0], spline_plan[1], spline_plan[2], acceleration, max_linear_speed, max_angular_speed, max_centripetal_acceleration)
         return (recorded_path, MSE_position, MSE_heading)
-
-    def resetGazebo(self):
-        """
-        Requests a Gazebo World Simulation.
-        """
-        rospy.loginfo("Navigation.py: Requesting Gazebo Reset from \'/gazebo/reset_simulation\' service")
-        rospy.wait_for_service("/gazebo/reset_simulation")
-        try:
-            client = rospy.ServiceProxy("/gazebo/reset_simulation", Empty)
-            response = client()
-            if response is None:
-                rospy.logerr("Navigation.py: error: failed to retrieve world reset service response")
-                exit()
-            rospy.loginfo("Navigation.py: world reset service ended")
-        except rospy.ServiceException as e:
-            rospy.logerr("Navigation.py: exception thrown: service call failed => exception: " + e.__str__())
 
     def handleSetMotionProfilingService(self, request):
         """
