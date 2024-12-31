@@ -427,7 +427,6 @@ class Navigation:
         # waypoints to travel through along spline path: (waypoint = (x, y, radians))
         waypoints = [(4,2,-math.pi/4.0), (5,1,-math.pi/2.0), (4, 0, -math.pi*3.0/4.0), (0, 0, math.pi)]
         recorded_path, MSE_position, MSE_heading = self.driveSplinePath(waypoints, self.ACCELERATION, self.MAX_ANGULAR_SPEED, self.MAX_LINEAR_SPEED, self.MAX_CENTRIPETAL_ACCELERATION)
-        self.resetGazebo()
         self.node_rate.sleep()
         return (recorded_path, MSE_position, MSE_heading)
 

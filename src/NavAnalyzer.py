@@ -1,8 +1,18 @@
 #!/usr/bin/env python3 
 import rospy
+from std_srvs.srv import Empty
 from ROS_SplinePathMotionProfiling.srv import GetNavCriteriaPlan, GetNavSimTest
 
 class NavAnalyzer: 
+
+    # Sim Test Results (MSE) for accel=0.02, max-lin-speed=1.0, max-ang-speed=1.0, max-centrip-accel=7.84, LIN-PID = [kp=1.0,ki=0,kd=0.25], ANG-PID = [kp=4.0,ki=0.001,kd=15.0]
+    # Position error: 0.0002166328170781128, heading error: 1.9915409523919663
+    # Position error: 0.00010015798099621572, heading error: 0.29327870231559616
+    # Position error: 0.00011856977120692698, heading error: 0.28940784336306236
+
+    # Position error: 0.0001606594634831609, heading error: 0.29074097147422684
+    # Position error: 0.0001448117502408014, heading error: 0.4874795499346864
+
     def __init__(self):
         # initialize node
         rospy.init_node("nav_analyzer", anonymous=True)
@@ -70,7 +80,24 @@ class NavAnalyzer:
             rospy.logerr("NavAnalyzer.py: exception thrown: service call failed => exception: " + e.__str__())
         return None
             
+    def resetGazebo(self):
+        """
+        Requests a Gazebo World Simulation.
+        """
+        rospy.loginfo("NavAnalyzer.py: Requesting Gazebo Reset from \'/gazebo/reset_simulation\' service")
+        rospy.wait_for_service("/gazebo/reset_simulation")
+        try:
+            client = rospy.ServiceProxy("/gazebo/reset_simulation", Empty)
+            response = client()
+            if response is None:
+                rospy.logerr("NavAnalyzer.py: error: failed to retrieve world reset service response")
+                exit()
+            rospy.loginfo("NavAnalyzer.py: world reset service ended")
+        except rospy.ServiceException as e:
+            rospy.logerr("NavAnalyzer.py: exception thrown: service call failed => exception: " + e.__str__())
+
     def run(self):
+        self.resetGazebo()
         self.configureNavMotionProfilingCriteria(self.ACCELERATION, self.MAX_LINEAR_SPEED, self.MAX_ANGULAR_SPEED, self.MAX_CENTRIPETAL_ACCELERATION)
         pos_err, ang_err = self.requestNavSimTest(lin_kp=self.LIN_KP, lin_ki=self.LIN_KI, lin_kd=self.LIN_KD, ang_kp=self.ANG_KP, ang_ki=self.ANG_KI, ang_kd=self.ANG_KD)
         print("Position error: " + str(pos_err) + ", heading error: " + str(ang_err))
