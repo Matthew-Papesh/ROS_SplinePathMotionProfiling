@@ -1,4 +1,5 @@
 from typing import Callable
+import rospy
 
 # coefficient type mappings 
 class ktype: # k coeff types
@@ -14,7 +15,7 @@ class PIDTuner:
     average between the base value and the point at (+/-) range from a base value (midpoints between low/high bounds and the base value)
     """
     # number of epochs to test for average pid eval
-    eval_epochs = 3
+    eval_epochs = 1
 
     def __init__(self, base_kp: float, base_ki: float, base_kd: float, kp_range: float, ki_range: float, kd_range: float, test_pid: Callable[[float, float, float], float]):
         """
@@ -99,7 +100,7 @@ class PIDTuner:
             sum += self.test_pid_def(kp, ki, kd)
         return sum / epochs
 
-    def step(self, k_type: int, epochs: int) -> list:
+    def step(self, k_type: int, epochs: int, prompt: str) -> list:
         """
         Computes the optimal value for the specified coefficient while descending error over a number of epochs.
         param: k_type [int] The specified coefficient type id 
@@ -134,6 +135,9 @@ class PIDTuner:
             elif lower_error == min_error:
                 # lower bound is most desirable; step in that direction and re-test
                 self.updateBounds(k_type=k_type, k_base=args[(LOWER, k_type, k_type)], k_range=ranges[k_type]/2)
+            step_prompt = prompt + "step_epoch=" + str(epoch) + " of " + str(epochs) + " : completion=" + format(100.0*(float(epoch+1)/float(epochs)), '.5') + "%"
+            pid = "( "+ format(self.opt_kp, '.5') + ", " + format(self.opt_ki, '.5') + ", " + format(self.opt_kd, '.5') + " )"
+            rospy.loginfo("PIDTuner.py: PID=" + pid + " => " + step_prompt)
         # return error log
         return error_log
         
@@ -168,13 +172,13 @@ class PIDTuner:
         param: log_error [bool] Enables writing performance error of each coefficient to respective logging files
         """
         # tuning phase #1
-        kp_error_log = self.step(k_type=ktype.KP, epochs=kp_epochs)
-        kd_error_log = self.step(k_type=ktype.KD, epochs=kd_epochs)
+        kp_error_log = self.step(k_type=ktype.KP, epochs=int(max(1, kp_epochs)), prompt="[kp-test, phase 1.1] : ")
+        kd_error_log = self.step(k_type=ktype.KD, epochs=int(max(1, kd_epochs)), prompt="[kd-test, phase 1.2] : ")
         # tuning phase #2
-        kp_error_log = kp_error_log + self.step(k_type=ktype.KP, epochs=kp_epochs/2)
-        kd_error_log = kd_error_log + self.step(k_type=ktype.KD, epochs=kd_epochs/2)
+        kp_error_log = kp_error_log + self.step(k_type=ktype.KP, epochs=int(max(1, kp_epochs/2)), prompt="[kp-test, phase 2.1] : ")
+        kd_error_log = kd_error_log + self.step(k_type=ktype.KD, epochs=int(max(1, kd_epochs/2)), prompt="[kd-test, phase 2.2] : ")
         # tuning phase #3
-        ki_error_log = self.step(k_type=ktype.KI, epochs=ki_epochs)
+        ki_error_log = self.step(k_type=ktype.KI, epochs=max(1, int(ki_epochs)), prompt="[ki-test, phase 3] : ")
 
         # record log errors
         if log_error:

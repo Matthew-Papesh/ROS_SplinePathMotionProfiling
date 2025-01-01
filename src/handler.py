@@ -142,3 +142,21 @@ def get_circle(p_0: tuple[float, float], p_1: tuple[float, float], p_2: tuple[fl
     y_center = -B
     R = pow(pow(A, 2.0) + pow(B, 2.0) - C, 0.5) 
     return (x_center, y_center, R)
+
+def is_statistical_outlier(sorted_distribution: list, data: float) -> bool: 
+    """
+    Calculates whether or not a given data point is an outlier among a list of sorted numberical distribution. 
+    param: sorted_distribution [list] The specified distribution
+    param: data [float] The specified data point
+    returns: whether the data point is an outlier or not 
+    """
+    # compute distribution characteristics
+    N = float(len(sorted_distribution))
+    Q1 = float(sorted_distribution[int(max(0, min(math.floor(0.25*N - 1.0), N - 1)))])
+    Q3 = float(sorted_distribution[int(max(0, min(math.ceil(0.75*N - 1.0), N - 1)))])
+    IQR = Q3 - Q1
+    # compute inclusive bounds for non-outlier data 
+    upper_bound = Q3 + 1.5*IQR  
+    lower_bound = Q1 - 1.5*IQR
+    # check data is out of bounds or not
+    return data < lower_bound or data > upper_bound

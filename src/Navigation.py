@@ -13,7 +13,7 @@ import math
 import heapq
 
 # testing flags:
-INTERNAL_TESTING = False
+INTERNAL_TESTING = True
 
 class Navigation: 
 
@@ -43,6 +43,13 @@ class Navigation:
         # pid feedback coefficients (linear and angular differential speed PID)
         self.ANG_KP, self.ANG_KI, self.ANG_KD = 4.0, 0.001, 15.0
         self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.0, 0.000, 0.25
+
+        #self.ANG_KP, self.ANG_KI, self.ANG_KD = 3.658, -0.0009141, 14.16
+        #self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.022, 0.000, -0.7178
+
+        # Found Coefficients: 
+        # Angular: kp = 3.658, ki = -0.0009141, kd = 14.16
+        # Linear: kp = 1.022, ki = 0.0, kd = -0.7178
 
         self.initPublishers()
         self.initSubscribers()
@@ -298,6 +305,7 @@ class Navigation:
         
         # current index point considered from a set of points about a base point on a spline path with a radius range of padding
         index, padding = 0, 10
+
         # create angular speed pid feedback handler based on the current index point along a spline
         def feedback_process_variable() -> float:
             orig_x = self.current_pose.pose.position.x
@@ -319,6 +327,10 @@ class Navigation:
 
         # path of odometry poses recorded to have minimal MSE error with respect to their corresponding spline path waypoint
         recorded_path = Path()
+        # specified max time allowed to drive from one waypoint to the next before assuming that driving has failed
+        frontier_timeout = 1.0
+        # previous stamped time of reaching the next waypoint while driving
+        prev_frontier_update_time = -1.0
 
         # min error and associated recorded odometry pose compared-to/of a given waypoint 
         # such that the frontier is the furthest point reached on the spline while driving
@@ -327,28 +339,38 @@ class Navigation:
         MSE_heading_error = 0.0 # MSE of overall path by heading (radians)
         max_position_error = 0.0 # max position error recorded 
         max_heading_error = 0.0 # max heading error recorded
+
         # drive robot with speed data and feedback control
         while index < len(spline_path.poses) - 1:
-            # approximate position by MSE
-            index, error = self.getPoseIndexByMSE(spline_path, self.current_pose, index, padding) 
-            
+            # approximate current position by MSE (current position; not recorded approximates to waypoints)
+            index, raw_error = self.getPoseIndexByMSE(spline_path, self.current_pose, index, padding) 
+
+            # check if the robot is taking too long to progress along the path; end path driving if progession/expanding the frontier driven takes too long
+            if prev_frontier_update_time > 0 and rospy.get_time() - prev_frontier_update_time > frontier_timeout:
+                self.setSpeed(0, 0) # stop driving, end early, and return pct performance errors of 100% to indicate faulty path driving
+                return (recorded_path, 1.0, 1.0)
+
             # record the closest the robot drove to the point and compute error/best init pose of next point
             # if frontier expanded
             if index > frontier_index:
                 if recorded_pose is not None:
                     recorded_path.poses.append(recorded_pose)
-                    heading_error = pow(handler.get_heading(recorded_pose) - handler.get_heading(spline_path.poses[frontier_index]), 2.0)
-                    MSE_position_error += error # add an error term to sum for MSE calculation
-                    MSE_heading_error += heading_error
-                    max_position_error = max(max_position_error, error) # compute maximums
-                    max_heading_error = max(max_heading_error, heading_error)
+                    # heading error associated with min error (position error) 
+                    min_heading_error = pow(handler.get_heading(recorded_pose) - handler.get_heading(spline_path.poses[frontier_index]), 2.0)
+                    # add an error term to sum for MSE calculation
+                    MSE_position_error += min_error 
+                    MSE_heading_error += min_heading_error
+                    max_position_error = max(max_position_error, raw_error) 
+                    # compute maximums
+                    max_heading_error = max(max_heading_error, min_heading_error)
 
-                min_error = error
+                prev_frontier_update_time = rospy.get_time() # stamp time of updating frontier
+                min_error = raw_error
                 recorded_pose = self.current_pose
                 frontier_index = index
             # evaluate the closest the robot drove by min error for current point
-            elif min_error is None or error < min_error:
-                min_error = error
+            elif min_error is None or raw_error < min_error:
+                min_error = raw_error
                 recorded_pose = self.current_pose
 
             # visualize padded local area considered for MSE; visualize by gridcells

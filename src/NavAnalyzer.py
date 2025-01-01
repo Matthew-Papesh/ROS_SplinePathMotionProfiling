@@ -141,13 +141,12 @@ class NavAnalyzer:
         # initialize profiling criteria
         self.configureNavMotionProfilingCriteria(self.ACCELERATION, self.MAX_LINEAR_SPEED, self.MAX_ANGULAR_SPEED, self.MAX_CENTRIPETAL_ACCELERATION)
 
-        count = 0
         def angular_pid_test(kp: float, ki: float, kd: float) -> float:
             self.resetGazebo()
             rospy.sleep(1)
             pos_err, ang_err = self.requestNavSimTest(lin_kp=self.LIN_KP, lin_ki=self.LIN_KI, lin_kd=self.LIN_KD, ang_kp=kp, ang_ki=ki, ang_kd=kd)
             error = (pos_err + ang_err) / 2.0
-            print(str(count) + " - ANG: Position error: " + format(100.0*pos_err, '.3') + "%, Heading error: " + format(100.0*ang_err, '.3') + "%")
+            print("ANG: Position error: " + format(100.0*pos_err, '.3') + "%, Heading error: " + format(100.0*ang_err, '.3') + "%")
             return error
         
         def linear_pid_test(kp: float, ki: float, kd: float) -> float:
@@ -155,7 +154,7 @@ class NavAnalyzer:
             rospy.sleep(1)
             pos_err, ang_err = self.requestNavSimTest(lin_kp=kp, lin_ki=ki, lin_kd=kd, ang_kp=self.ANG_KP, ang_ki=self.ANG_KI, ang_kd=self.ANG_KD)
             error = (pos_err + ang_err) / 2.0
-            print(str(count) + " - LIN: Position error: " + format(100.0*pos_err, '.3') + "%, Heading error: " + format(100.0*ang_err, '.3') + "%")
+            print("LIN: Position error: " + format(100.0*pos_err, '.3') + "%, Heading error: " + format(100.0*ang_err, '.3') + "%")
             return error
         
         angular_pid_tuner = PIDTuner(self.ANG_KP, self.ANG_KI, self.ANG_KD, 3.0, 0.01, 5.0, angular_pid_test)
@@ -163,7 +162,6 @@ class NavAnalyzer:
 
         # tune coefficients
         self.ANG_KP, self.ANG_KI, self.ANG_KD = angular_pid_tuner.tune(10, 10, 10, False)
-        count = 0
         self.LIN_KP, self.LIN_KI, self.LIN_KD = linear_pid_tuner.tune(10, 10, 10, False)
         
         print("Found Coefficients: ")
@@ -173,3 +171,7 @@ class NavAnalyzer:
 
 if __name__ == "__main__":
     NavAnalyzer().run()
+
+# Found Coefficients: 
+# Angular: kp = 3.658, ki = -0.0009141, kd = 14.16
+# Linear: kp = 1.022, ki = 0.0, kd = -0.7178
