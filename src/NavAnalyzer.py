@@ -5,6 +5,8 @@ from ROS_SplinePathMotionProfiling.srv import GetNavCriteriaPlan, GetNavSimTest
 from PIDTuner import PIDTuner
 from gazebo_msgs.srv import SetModelState
 from gazebo_msgs.msg import ModelState
+import handler
+import time
 
 class NavAnalyzer: 
 
@@ -36,10 +38,11 @@ class NavAnalyzer:
         self.MAX_ANGULAR_SPEED = 1.0 # [radians/sec]
         self.MAX_LINEAR_SPEED = 1.0 # [m/sec]
         self.MAX_CENTRIPETAL_ACCELERATION = centripetal_acceleration * scaler # [m/sec^2]
-
+        
+        # tuned ANG pid (input = (kp=4.0,ki=0.0001,kd=4.0)) output = (kp=5.196,ki=0.000734,kd=1.035) [NO LIN pid]
         # pid feedback coefficients (linear and angular differential speed PID)
-        self.ANG_KP, self.ANG_KI, self.ANG_KD = 4.0, 0.001, 15.0
-        self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.0, 0.000, 0.25
+        self.ANG_KP, self.ANG_KI, self.ANG_KD = 5.196, 0.000734, 1.035
+        self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.0, 0.001, 0.5 
         
     def configureNavMotionProfilingCriteria(self, acceleration: float, max_lin_speed: float, max_ang_speed: float, max_centripetal_acceleration: float): 
         """
@@ -141,14 +144,15 @@ class NavAnalyzer:
         # initialize profiling criteria
         self.configureNavMotionProfilingCriteria(self.ACCELERATION, self.MAX_LINEAR_SPEED, self.MAX_ANGULAR_SPEED, self.MAX_CENTRIPETAL_ACCELERATION)
 
+        # test to complete to compute angular pid error
         def angular_pid_test(kp: float, ki: float, kd: float) -> float:
             self.resetGazebo()
-            rospy.sleep(1)
+            time.sleep(1)
             pos_err, ang_err = self.requestNavSimTest(lin_kp=self.LIN_KP, lin_ki=self.LIN_KI, lin_kd=self.LIN_KD, ang_kp=kp, ang_ki=ki, ang_kd=kd)
             error = (pos_err + ang_err) / 2.0
             print("ANG: Position error: " + format(100.0*pos_err, '.3') + "%, Heading error: " + format(100.0*ang_err, '.3') + "%")
             return error
-        
+        # test to complete to compute linear pid error
         def linear_pid_test(kp: float, ki: float, kd: float) -> float:
             self.resetGazebo()
             rospy.sleep(1)
@@ -157,13 +161,21 @@ class NavAnalyzer:
             print("LIN: Position error: " + format(100.0*pos_err, '.3') + "%, Heading error: " + format(100.0*ang_err, '.3') + "%")
             return error
         
-        angular_pid_tuner = PIDTuner(self.ANG_KP, self.ANG_KI, self.ANG_KD, 3.0, 0.01, 5.0, angular_pid_test)
-        linear_pid_tuner = PIDTuner(self.LIN_KP, self.LIN_KI, self.LIN_KD, 1.0, 0.0, 1.0, linear_pid_test)
+        # pid controller auto-tuners
+        angular_pid_tuner = PIDTuner(self.ANG_KP, self.ANG_KI, self.ANG_KD, 2.0, 0.0001, 3.0, angular_pid_test)
+        linear_pid_tuner = PIDTuner(self.LIN_KP, self.LIN_KI, self.LIN_KD, 1.0, 0.0001, 1.0, linear_pid_test)
+
+        # set auto tuner(s) coefficient error logging files 
+        root_dir = handler.get_ros_package_root("ROS_SplinePathMotionProfiling")
+        rel_pid_err_log_dir = "/pid_tuning_err_logs/"
+        angular_pid_tuner.setErrorLog(root_dir + rel_pid_err_log_dir, "ang_kp_err_log.csv", "ang_ki_err_log.csv", "ang_kd_err_log.csv")
+        linear_pid_tuner.setErrorLog(root_dir + rel_pid_err_log_dir, "lin_kp_err_log.csv", "lin_ki_err_log.csv", "lin_kd_err_log.csv")
 
         # tune coefficients
-        self.ANG_KP, self.ANG_KI, self.ANG_KD = angular_pid_tuner.tune(10, 10, 10, False)
-        self.LIN_KP, self.LIN_KI, self.LIN_KD = linear_pid_tuner.tune(10, 10, 10, False)
-        
+        self.ANG_KP, self.ANG_KI, self.ANG_KD = angular_pid_tuner.tune(10, 10, 10, True)
+        self.LIN_KP, self.LIN_KI, self.LIN_KD = linear_pid_tuner.tune(10, 10, 10, True)
+        self.ANG_KP, self.ANG_KI, self.ANG_KD = angular_pid_tuner.tune(4, 4, 4, True)
+
         print("Found Coefficients: ")
         print("Angular: kp = " + format(self.ANG_KP, '.4') + ", ki = " + format(self.ANG_KI, '.4') + ", kd = " + format(self.ANG_KD, '.4'))
         print("Linear: kp = " + format(self.LIN_KP, '.4') + ", ki = " + format(self.LIN_KI, '.4') + ", kd = " + format(self.LIN_KD, '.4'))

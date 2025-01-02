@@ -13,7 +13,7 @@ import math
 import heapq
 
 # testing flags:
-INTERNAL_TESTING = True
+INTERNAL_TESTING = False
 
 class Navigation: 
 
@@ -41,15 +41,24 @@ class Navigation:
         self.MAX_CENTRIPETAL_ACCELERATION = 0.0 # [m/sec^2]
 
         # pid feedback coefficients (linear and angular differential speed PID)
-        self.ANG_KP, self.ANG_KI, self.ANG_KD = 4.0, 0.001, 15.0
-        self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.0, 0.000, 0.25
+        #self.ANG_KP, self.ANG_KI, self.ANG_KD = 4.0, 0.0001, 4.0
+        self.ANG_KP, self.ANG_KI, self.ANG_KD = 5.196, 0.000734, 1.035
+        # LIN_KP bounds: [0.0, 2.0] not at or above 2.0 ideal=1.0
+        self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.0, 0.001, 0.5 # INIT ERR: Position error: 5.5162%, Heading error: 0.74635% => AVG ERR (pos err: 5.2042 %, heading err: 0.65 %)
 
         #self.ANG_KP, self.ANG_KI, self.ANG_KD = 3.658, -0.0009141, 14.16
         #self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.022, 0.000, -0.7178
 
-        # Found Coefficients: 
-        # Angular: kp = 3.658, ki = -0.0009141, kd = 14.16
-        # Linear: kp = 1.022, ki = 0.0, kd = -0.7178
+        # SECOND AUTOTUNING TEST (NO LIN PID, INITIAL ANG PID = (kp,ki,kd) = (4.0, 0.0001, 4.0)) => Results: (kp,ki,kd) = (5.196, 0.000734, 1.035)
+        # Terminal: [INTERNAL TEST]
+        # /gaz/src/ROS_SplinePathMotionProfiling$ rosrun ROS_SplinePathMotionProfiling Navigation.py 
+        # [INFO] [1735796961.040648, 4.877000]: Navigation.py: Requesting simple spline path from '/quintic_spline_path/simple_spline_plan' service
+        # [INFO] [1735796961.077613, 4.913000]: Navigation.py: simple spline path service ended; returning path
+        # [INFO] [1735797008.462992, 52.219000]: Navigation.py: Position error: 16.038%, Heading error: 1.1092%
+        # /gaz/src/ROS_SplinePathMotionProfiling$ rosrun ROS_SplinePathMotionProfiling Navigation.py 
+        # [INFO] [1735797120.130612, 5.762000]: Navigation.py: Requesting simple spline path from '/quintic_spline_path/simple_spline_plan' service
+        # [INFO] [1735797120.168004, 5.798000]: Navigation.py: simple spline path service ended; returning path
+        # [INFO] [1735797167.550590, 53.103000]: Navigation.py: Position error: 5.5162%, Heading error: 0.74635%
 
         self.initPublishers()
         self.initSubscribers()
@@ -312,8 +321,8 @@ class Navigation:
             orig_y = self.current_pose.pose.position.y
             orig_radians = handler.get_heading(self.current_pose)
             
-            spline_x = spline_path.poses[min(index + 1, len(spline_path.poses) - 1)].pose.position.x
-            spline_y = spline_path.poses[min(index + 1, len(spline_path.poses) - 1)].pose.position.y
+            spline_x = spline_path.poses[min(index + padding, len(spline_path.poses) - 1)].pose.position.x
+            spline_y = spline_path.poses[min(index + padding, len(spline_path.poses) - 1)].pose.position.y
             
             variable = handler.rotate(spline_x - orig_x, spline_y - orig_y, -orig_radians)[1]
             return variable
@@ -323,7 +332,7 @@ class Navigation:
         linear_speeds, angular_speeds, radius = speeds[0], speeds[1], speeds[2] 
         # pid angular speed feedback controller 
         angular_speed_feedback = PID(kp=self.ANG_KP, ki=self.ANG_KI, kd=self.ANG_KD, process_variable=feedback_process_variable, set_point=lambda: 0.0, clegg_integration=True)
-        linear_speed_feedback = PID(kp=self.LIN_KP, ki=self.LIN_KI, kd=self.LIN_KD, process_variable=feedback_process_variable, set_point=lambda: 0.0, clegg_integration=False)
+        linear_speed_feedback = PID(kp=self.LIN_KP, ki=self.LIN_KI, kd=self.LIN_KD, process_variable=feedback_process_variable, set_point=lambda: 0.0, clegg_integration=True)
 
         # path of odometry poses recorded to have minimal MSE error with respect to their corresponding spline path waypoint
         recorded_path = Path()
@@ -454,7 +463,9 @@ class Navigation:
         self.MAX_ANGULAR_SPEED = 1.0 # [radians/sec]
         self.MAX_LINEAR_SPEED = 1.0 # [m/sec]
         self.MAX_CENTRIPETAL_ACCELERATION = centripetal_acceleration * scaler # [m/sec^2]
-        self.test()
+        _, MSE_position, MSE_heading = self.test()
+        # print results:
+        rospy.loginfo("Navigation.py: Position error: " + format(100.0*MSE_position, '.5') + "%, Heading error: " + format(100.0*MSE_heading, '.5') + "%")
 
     def run(self):
         if INTERNAL_TESTING: 

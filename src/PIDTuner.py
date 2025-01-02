@@ -1,5 +1,6 @@
 from typing import Callable
 import rospy
+import handler
 
 # coefficient type mappings 
 class ktype: # k coeff types
@@ -29,10 +30,15 @@ class PIDTuner:
         param: test_pid [Callable[[float, float, float], float]] The specified callable supplier to handle running the pid controller and returning performance error
         """
         # set base values and bounds
-        self.init_kp, self.init_ki, self.init_kd = base_kp, base_ki, base_kd
-        self.opt_kp, self.opt_ki, self.opt_kd = base_kp, base_ki, base_kd
-        self.kp_range, self.ki_range, self.kd_range = kp_range, ki_range, kd_range
-        self.test_pid_def = test_pid
+        self.init_kp, self.init_ki, self.init_kd = base_kp, base_ki, base_kd # set initial values
+        self.init_kp_range, self.init_ki_range, self.init_kd_range = kp_range, ki_range, kd_range
+        self.kp_domain = (max(0, base_kp - kp_range), base_kp + kp_range) # set domains as the sets of all possible coefficients
+        self.ki_domain = (max(0, base_ki - ki_range), base_ki + ki_range)
+        self.kd_domain = (max(0, base_kd - kd_range), base_kd + kd_range)
+
+        self.opt_kp, self.opt_ki, self.opt_kd = base_kp, base_ki, base_kd # optimal coefficients currently set before/during tuning
+        self.kp_range, self.ki_range, self.kd_range = kp_range, ki_range, kd_range # testing range from current optimal coefficients
+        self.test_pid_def = test_pid # callable test for returning pid error
 
         # error logging file names:
         self.kp_error_file = ""
@@ -76,14 +82,14 @@ class PIDTuner:
         param: k_range [float] The specified testing range
         """
         if k_type == ktype.KP:
-            self.opt_kp = k_base
-            self.kp_range = k_range
+            self.opt_kp = min(self.kp_domain[1], max(self.kp_domain[0], k_base))
+            self.kp_range = max(0, k_range)
         elif k_type == ktype.KI:
-            self.opt_ki = k_base
-            self.ki_range = k_range
+            self.opt_ki = min(self.ki_domain[1], max(self.ki_domain[0], k_base))
+            self.ki_range = max(0, k_range)
         elif k_type == ktype.KD:
-            self.opt_kd = k_base
-            self.kd_range = k_range
+            self.opt_kd = min(self.kd_domain[1], max(self.kd_domain[0], k_base))
+            self.kd_range = max(0, k_range)
 
     def evaluate(self, kp: float, ki: float, kd: float, epochs: int) -> float: 
         """
@@ -120,6 +126,12 @@ class PIDTuner:
             args = self.kEvalArgs()
             # map current ranges by k types:
             ranges = {ktype.KP: self.kp_range, ktype.KI: self.ki_range, ktype.KD: self.kd_range}
+
+            pid_base_case = "BASE => ( " + format(args[(BASE, k_type, KP)], '.5') + ", " + format(args[(BASE, k_type, KI)], '.5') + ", " + format(args[(BASE, k_type, KD)], '.5') + " )"
+            pid_lower_case = "LOWER => ( " + format(args[(LOWER, k_type, KP)], '.5') + ", " + format(args[(LOWER, k_type, KI)], '.5') + ", " + format(args[(LOWER, k_type, KD)], '.5') + " )"
+            pid_upper_case = "UPPER => ( " + format(args[(UPPER, k_type, KP)], '.5') + ", " + format(args[(UPPER, k_type, KI)], '.5') + ", " + format(args[(UPPER, k_type, KD)], '.5') + " )"
+            rospy.loginfo("PIDTuner.py: Starting next step_epoch. PID (kp,ki,kd) cases: \n" + pid_base_case + ", " + pid_lower_case + ", " + pid_upper_case)
+
             # compute error for all cases:
             base_error = self.evaluate(kp=args[(BASE, k_type, KP)], ki=args[(BASE, k_type, KI)], kd=args[(BASE, k_type, KD)], epochs=eval_epochs)
             lower_error = self.evaluate(kp=args[(LOWER, k_type, KP)], ki=args[(LOWER, k_type, KI)], kd=args[(LOWER, k_type, KD)], epochs=eval_epochs)
@@ -135,22 +147,23 @@ class PIDTuner:
             elif lower_error == min_error:
                 # lower bound is most desirable; step in that direction and re-test
                 self.updateBounds(k_type=k_type, k_base=args[(LOWER, k_type, k_type)], k_range=ranges[k_type]/2)
-            step_prompt = prompt + "step_epoch=" + str(epoch) + " of " + str(epochs) + " : completion=" + format(100.0*(float(epoch+1)/float(epochs)), '.5') + "%"
+            step_prompt = prompt + "step_epoch=" + str(epoch+1) + " of " + str(epochs) + " : completion=" + format(100.0*(float(epoch+1)/float(epochs)), '.5') + "%"
             pid = "( "+ format(self.opt_kp, '.5') + ", " + format(self.opt_ki, '.5') + ", " + format(self.opt_kd, '.5') + " )"
             rospy.loginfo("PIDTuner.py: PID=" + pid + " => " + step_prompt)
         # return error log
         return error_log
         
-    def setErrorLog(self, kp_error_file: str, ki_error_file: str, kd_error_file: str):
+    def setErrorLog(self, root_dir: str, kp_error_file: str, ki_error_file: str, kd_error_file: str):
         """
         Sets the files to logger controller performance error to.
+        param: root_dir [str] The specified root directory with respect to where all three files are stored (files' directory)
         param: kp_error_file [str] The specified file for recorded kp error
         param: ki_error_file [str] The specified file for recorded ki error
         param: kd_error_file [str] The specified file for recorded kd error 
         """
-        self.kp_error_file = kp_error_file
-        self.ki_error_file = ki_error_file
-        self.kd_error_file = kd_error_file
+        self.kp_error_file = root_dir + kp_error_file
+        self.ki_error_file = root_dir + ki_error_file
+        self.kd_error_file = root_dir + kd_error_file
 
     def logError(self, error_file: str, error_data: list):
         """
@@ -158,9 +171,9 @@ class PIDTuner:
         param: error_file [str] The specified file to write to
         param: error_data [list] The specified list of data 
         """
-        with open(error_file, "w") as file:
+        with open(error_file, "a") as file:
             for error in error_data:
-                file.write(str(error))
+                file.write(str(error) + "\n")
 
     def tune(self, kp_epochs: int, ki_epochs: int, kd_epochs: int, log_error: bool):
         """
@@ -171,14 +184,21 @@ class PIDTuner:
         param: kd_epochs [int] The specified max number of epochs for stepping through kd tunning a single time
         param: log_error [bool] Enables writing performance error of each coefficient to respective logging files
         """
-        # tuning phase #1
+        # tuning phase #1 => reset ranges for all coefficients (kp, ki, and kd) for first few phases
         kp_error_log = self.step(k_type=ktype.KP, epochs=int(max(1, kp_epochs)), prompt="[kp-test, phase 1.1] : ")
         kd_error_log = self.step(k_type=ktype.KD, epochs=int(max(1, kd_epochs)), prompt="[kd-test, phase 1.2] : ")
+        self.resetRange()
         # tuning phase #2
-        kp_error_log = kp_error_log + self.step(k_type=ktype.KP, epochs=int(max(1, kp_epochs/2)), prompt="[kp-test, phase 2.1] : ")
-        kd_error_log = kd_error_log + self.step(k_type=ktype.KD, epochs=int(max(1, kd_epochs/2)), prompt="[kd-test, phase 2.2] : ")
+        kp_error_log = kp_error_log + self.step(k_type=ktype.KP, epochs=int(max(1, kp_epochs)), prompt="[kp-test, phase 2.1] : ")
+        kd_error_log = kd_error_log + self.step(k_type=ktype.KD, epochs=int(max(1, kd_epochs)), prompt="[kd-test, phase 2.2] : ")
+        self.resetRange()
         # tuning phase #3
-        ki_error_log = self.step(k_type=ktype.KI, epochs=max(1, int(ki_epochs)), prompt="[ki-test, phase 3] : ")
+        ki_error_log = self.step(k_type=ktype.KI, epochs=int(max(1, ki_epochs)), prompt="[ki-test, phase 3] : ")
+        # tuning phase #4 => maintain ranges without reset for greater precision; just revisit all coefficients a final time
+        kp_error_log = kp_error_log + self.step(k_type=ktype.KP, epochs=int(max(1, kp_epochs/2)), prompt="[kp-test, phase 4.1] : ")
+        kd_error_log = kd_error_log + self.step(k_type=ktype.KD, epochs=int(max(1, kd_epochs/2)), prompt="[kd-test, phase 4.2] : ")
+        ki_error_log = ki_error_log + self.step(k_type=ktype.KI, epochs=int(max(1, ki_epochs/2)), prompt="[ki-test, phase 4.3] : ")
+        self.resetRange()
 
         # record log errors
         if log_error:
@@ -188,10 +208,30 @@ class PIDTuner:
         # return tuned coefficients
         return (self.opt_kp, self.opt_ki, self.opt_kd)
 
+    def resetRange(self):
+        """
+        Resets pid coefficient ranges to their initial values before any tuning
+        """
+        self.kp_range = self.init_kp_range
+        self.ki_range = self.init_ki_range
+        self.kd_range = self.init_kd_range
+
     def reset(self):
         """
-        Resets pid coefficients to their initial values before any tuning. 
+        Resets pid coefficients and ranges to their initial values before any tuning. 
         """
         self.opt_kp = self.init_kp
         self.opt_ki = self.init_ki
         self.opt_kd = self.init_kd    
+        self.resetRange()
+
+if __name__ == "__main__":
+    tuner = PIDTuner(1, 1, 1, 0.5, 0.5, 0.5, lambda: 0) 
+    
+    root_dir = handler.get_ros_package_root("ROS_SplinePathMotionProfiling")
+    rel_log_dir = "/pid_tuning_err_logs/"
+    tuner.setErrorLog(root_dir + rel_log_dir, "kp_err_log.csv", "ki_err_log.csv", "kd_err_log.csv")
+
+    err = [1, 2, 3, 4]
+    print("kp err file: " + tuner.kp_error_file)
+    tuner.logError(tuner.kp_error_file, err)

@@ -4,7 +4,20 @@ from geometry_msgs.msg import PoseStamped, Point
 from nav_msgs.msg import Path, GridCells
 from tf.transformations import euler_from_quaternion
 from tf.transformations import quaternion_from_euler
+import rospkg
 import math
+
+def get_ros_package_root(package_name):
+    """
+    Returns the root directory of a ROS package given its name.
+    param: package_name [str] The specified name of the ROS package
+    returns: The root directory of the package
+    """
+    rospack = rospkg.RosPack()
+    try:
+        return rospack.get_path(package_name)
+    except rospkg.ResourceNotFound:
+        return None
 
 def get_heading(pose: PoseStamped) -> float:
     """
@@ -160,3 +173,4 @@ def is_statistical_outlier(sorted_distribution: list, data: float) -> bool:
     lower_bound = Q1 - 1.5*IQR
     # check data is out of bounds or not
     return data < lower_bound or data > upper_bound
+
