@@ -100,6 +100,9 @@ class PIDTuner:
         param: epochs [int] The specified number of trial tests to average error over 
         returns: the average controller performance error
         """
+        if kp < 0 or ki < 0 or kd < 0:
+            return 1.0 # assume max error for all negative coefficients; these cases should not be considered valid
+
         sum = 0.0
         epochs = max(1, epochs)
         for i in range(0, epochs):

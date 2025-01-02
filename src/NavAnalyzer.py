@@ -10,6 +10,10 @@ import time
 
 class NavAnalyzer: 
 
+    # LAST TUNING CONVERGING PIDS:
+    # LIN => PID=( 0.32227, 0.0010875, 1.3242 )
+    # ANG => PID=( 4.2585, 0.00074279, 0.050625 )
+
     # Sim Test Results (MSE) for accel=0.02, max-lin-speed=1.0, max-ang-speed=1.0, max-centrip-accel=7.84, LIN-PID = [kp=1.0,ki=0,kd=0.25], ANG-PID = [kp=4.0,ki=0.001,kd=15.0]
     # Position error: 0.0002166328170781128, heading error: 1.9915409523919663
     # Position error: 0.00010015798099621572, heading error: 0.29327870231559616
@@ -147,7 +151,10 @@ class NavAnalyzer:
         # test to complete to compute angular pid error
         def angular_pid_test(kp: float, ki: float, kd: float) -> float:
             self.resetGazebo()
-            time.sleep(1)
+            try:
+                rospy.sleep(1)
+            except: 
+                rospy.logwarn("NavAnalyzier.py: Warning: rospy.sleep() failed likely due to ros time rollback from sim reset")
             pos_err, ang_err = self.requestNavSimTest(lin_kp=self.LIN_KP, lin_ki=self.LIN_KI, lin_kd=self.LIN_KD, ang_kp=kp, ang_ki=ki, ang_kd=kd)
             error = (pos_err + ang_err) / 2.0
             print("ANG: Position error: " + format(100.0*pos_err, '.3') + "%, Heading error: " + format(100.0*ang_err, '.3') + "%")
@@ -155,14 +162,17 @@ class NavAnalyzer:
         # test to complete to compute linear pid error
         def linear_pid_test(kp: float, ki: float, kd: float) -> float:
             self.resetGazebo()
-            rospy.sleep(1)
+            try:
+                rospy.sleep(1)
+            except: 
+                rospy.logwarn("NavAnalyzier.py: Warning: rospy.sleep() failed likely due to ros time rollback from sim reset")
             pos_err, ang_err = self.requestNavSimTest(lin_kp=kp, lin_ki=ki, lin_kd=kd, ang_kp=self.ANG_KP, ang_ki=self.ANG_KI, ang_kd=self.ANG_KD)
             error = (pos_err + ang_err) / 2.0
             print("LIN: Position error: " + format(100.0*pos_err, '.3') + "%, Heading error: " + format(100.0*ang_err, '.3') + "%")
             return error
         
         # pid controller auto-tuners
-        angular_pid_tuner = PIDTuner(self.ANG_KP, self.ANG_KI, self.ANG_KD, 2.0, 0.0001, 3.0, angular_pid_test)
+        angular_pid_tuner = PIDTuner(self.ANG_KP, self.ANG_KI, self.ANG_KD, 1.0, 0.0001, 2.0, angular_pid_test)
         linear_pid_tuner = PIDTuner(self.LIN_KP, self.LIN_KI, self.LIN_KD, 1.0, 0.0001, 1.0, linear_pid_test)
 
         # set auto tuner(s) coefficient error logging files 
@@ -184,6 +194,3 @@ class NavAnalyzer:
 if __name__ == "__main__":
     NavAnalyzer().run()
 
-# Found Coefficients: 
-# Angular: kp = 3.658, ki = -0.0009141, kd = 14.16
-# Linear: kp = 1.022, ki = 0.0, kd = -0.7178
