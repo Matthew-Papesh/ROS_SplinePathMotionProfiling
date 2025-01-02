@@ -87,7 +87,10 @@ class QuinticSplinePath:
 
         self.initPublishers()
         self.initSubscribers()
-        rospy.sleep(1.0)
+        try:
+            rospy.sleep(1.0)
+        except:
+            pass
     
     def initPublishers(self):
         """
@@ -198,7 +201,10 @@ class QuinticSplinePath:
                 self.plot(self.path_x, self.path_y, MATPLOTLIB_PLOT_QUINTIC)
                 self.path_x = None
                 self.path_y = None
-            self.node_rate.sleep()
+            try:
+                self.node_rate.sleep()
+            except:
+                pass
 
 if __name__ == "__main__":
     QuinticSplinePath().run()

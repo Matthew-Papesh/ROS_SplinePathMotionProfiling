@@ -62,8 +62,11 @@ class Navigation:
 
         self.initPublishers()
         self.initSubscribers()
-        rospy.sleep(1.0)
-    
+        try:
+            rospy.sleep(1.0)
+        except:
+            pass
+
     def initPublishers(self):
         """
         Initializes and creates all node publishers.
@@ -90,7 +93,10 @@ class Navigation:
 
     def handleCmdVelUpdate(self, msg: Twist):
         self.cmd_vel_subscriber_flag = True
-        self.node_rate.sleep()
+        try:
+            self.node_rate.sleep()
+        except:
+            pass
 
     def requestSimpleSplinePlan(self, waypoints: list) -> tuple[Path, list, list]:
         """
@@ -133,7 +139,10 @@ class Navigation:
 
         while not self.cmd_vel_subscriber_flag:
             self.cmd_vel_publisher.publish(speed)
-            self.node_rate.sleep()
+            try:
+                self.node_rate.sleep()
+            except:
+                pass
         self.cmd_vel_subscriber_flag = False
 
     def rotateDrive(self, radians: float, angular_speed: float):
@@ -150,7 +159,10 @@ class Navigation:
 
         self.setSpeed(0, angular_speed)
         while abs(handler.get_heading(self.current_pose) - init_heading) <= abs(radians):
-            self.node_rate.sleep()
+            try:
+                self.node_rate.sleep()
+            except:
+                pass
         self.setSpeed(0, 0)
 
     def forwardDrive(self, distance: float, linear_speed: float):
@@ -169,7 +181,10 @@ class Navigation:
         
         self.setSpeed(linear_speed, 0)
         while handler.euclid_distance((init_pose.pose.position.x, init_pose.pose.position.y), (self.current_pose.pose.position.x, self.current_pose.pose.position.y)) <= distance:
-            self.node_rate.sleep()
+            try:
+                self.node_rate.sleep()
+            except:
+                pass
         self.setSpeed(0, 0)
 
     def rvizViewSplinePathProgression(self, spline_path: Path, spline_index: int, padding: float): 
@@ -447,7 +462,10 @@ class Navigation:
         # waypoints to travel through along spline path: (waypoint = (x, y, radians))
         waypoints = [(4,2,-math.pi/4.0), (5,1,-math.pi/2.0), (4, 0, -math.pi*3.0/4.0), (0, 0, math.pi)]
         recorded_path, MSE_position, MSE_heading = self.driveSplinePath(waypoints, self.ACCELERATION, self.MAX_ANGULAR_SPEED, self.MAX_LINEAR_SPEED, self.MAX_CENTRIPETAL_ACCELERATION)
-        self.node_rate.sleep()
+        try:
+            self.node_rate.sleep()
+        except:
+            pass
         return (recorded_path, MSE_position, MSE_heading)
 
     def internalTest(self):
