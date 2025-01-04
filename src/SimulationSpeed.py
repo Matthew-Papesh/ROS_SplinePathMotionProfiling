@@ -42,7 +42,7 @@ class SimulationSpeed:
             rospy.logerr("SimulationSpeed.py exception thrown: service call failed => exception: " + e.__str__())
 
     def run(self):
-        update_rate = 5000
+        update_rate = 1000
         self.setSimulationSpeed(update_rate)
         rospy.spin()
 

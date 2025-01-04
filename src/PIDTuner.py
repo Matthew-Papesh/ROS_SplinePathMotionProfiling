@@ -16,7 +16,7 @@ class PIDTuner:
     average between the base value and the point at (+/-) range from a base value (midpoints between low/high bounds and the base value)
     """
     # number of epochs to test for average pid eval
-    eval_epochs = 1
+    eval_epochs = 5
 
     def __init__(self, base_kp: float, base_ki: float, base_kd: float, kp_range: float, ki_range: float, kd_range: float, test_pid: Callable[[float, float, float], float]):
         """
@@ -103,11 +103,21 @@ class PIDTuner:
         if kp < 0 or ki < 0 or kd < 0:
             return 1.0 # assume max error for all negative coefficients; these cases should not be considered valid
 
-        sum = 0.0
+        # sum of errors from each sim test evaluated for each epoch; valid epochs that did not end with a invalid percent error above or equal to 1.0
+        sum, valid_epochs = 0.0, epochs
         epochs = max(1, epochs)
         for i in range(0, epochs):
-            sum += self.test_pid_def(kp, ki, kd)
-        return sum / epochs
+            # compute error and sum if valid
+            error = self.test_pid_def(kp, ki, kd) 
+            if error < 1.0:
+                sum += error
+            else:
+                valid_epochs -= 1
+
+        # return avergage error over valid epochs only; else return max percent error of 1.0 if test was not valid
+        if valid_epochs > 0:
+            return sum / valid_epochs
+        return 1.0
 
     def step(self, k_type: int, epochs: int, prompt: str) -> list:
         """
@@ -130,9 +140,9 @@ class PIDTuner:
             # map current ranges by k types:
             ranges = {ktype.KP: self.kp_range, ktype.KI: self.ki_range, ktype.KD: self.kd_range}
 
-            pid_base_case = "BASE => ( " + format(args[(BASE, k_type, KP)], '.5') + ", " + format(args[(BASE, k_type, KI)], '.5') + ", " + format(args[(BASE, k_type, KD)], '.5') + " )"
-            pid_lower_case = "LOWER => ( " + format(args[(LOWER, k_type, KP)], '.5') + ", " + format(args[(LOWER, k_type, KI)], '.5') + ", " + format(args[(LOWER, k_type, KD)], '.5') + " )"
-            pid_upper_case = "UPPER => ( " + format(args[(UPPER, k_type, KP)], '.5') + ", " + format(args[(UPPER, k_type, KI)], '.5') + ", " + format(args[(UPPER, k_type, KD)], '.5') + " )"
+            pid_base_case = "BASE => ( " + format(float(args[(BASE, k_type, KP)]), '.5f') + ", " + format(float(args[(BASE, k_type, KI)]), '.5f') + ", " + format(float(args[(BASE, k_type, KD)]), '.5f') + " )"
+            pid_lower_case = "LOWER => ( " + format(float(args[(LOWER, k_type, KP)]), '.5f') + ", " + format(float(args[(LOWER, k_type, KI)]), '.5f') + ", " + format(float(args[(LOWER, k_type, KD)]), '.5f') + " )"
+            pid_upper_case = "UPPER => ( " + format(float(args[(UPPER, k_type, KP)]), '.5f') + ", " + format(float(args[(UPPER, k_type, KI)]), '.5f') + ", " + format(float(args[(UPPER, k_type, KD)]), '.5f') + " )"
             rospy.loginfo("PIDTuner.py: Starting next step_epoch. PID (kp,ki,kd) cases: \n" + pid_base_case + ", " + pid_lower_case + ", " + pid_upper_case)
 
             # compute error for all cases:
@@ -150,8 +160,8 @@ class PIDTuner:
             elif lower_error == min_error:
                 # lower bound is most desirable; step in that direction and re-test
                 self.updateBounds(k_type=k_type, k_base=args[(LOWER, k_type, k_type)], k_range=ranges[k_type]/2)
-            step_prompt = prompt + "step_epoch=" + str(epoch+1) + " of " + str(epochs) + " : completion=" + format(100.0*(float(epoch+1)/float(epochs)), '.5') + "%"
-            pid = "( "+ format(self.opt_kp, '.5') + ", " + format(self.opt_ki, '.5') + ", " + format(self.opt_kd, '.5') + " )"
+            step_prompt = prompt + "step_epoch=" + str(epoch+1) + " of " + str(epochs) + " : completion=" + format(100.0*(float(epoch+1)/float(epochs)), '.5f') + "%"
+            pid = "( "+ format(float(self.opt_kp), '.5f') + ", " + format(float(self.opt_ki), '.5f') + ", " + format(float(self.opt_kd), '.5f') + " )"
             rospy.loginfo("PIDTuner.py: PID=" + pid + " => " + step_prompt)
         # return error log
         return error_log
@@ -227,14 +237,3 @@ class PIDTuner:
         self.opt_ki = self.init_ki
         self.opt_kd = self.init_kd    
         self.resetRange()
-
-if __name__ == "__main__":
-    tuner = PIDTuner(1, 1, 1, 0.5, 0.5, 0.5, lambda: 0) 
-    
-    root_dir = handler.get_ros_package_root("ROS_SplinePathMotionProfiling")
-    rel_log_dir = "/pid_tuning_err_logs/"
-    tuner.setErrorLog(root_dir + rel_log_dir, "kp_err_log.csv", "ki_err_log.csv", "kd_err_log.csv")
-
-    err = [1, 2, 3, 4]
-    print("kp err file: " + tuner.kp_error_file)
-    tuner.logError(tuner.kp_error_file, err)

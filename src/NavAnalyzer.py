@@ -42,12 +42,30 @@ class NavAnalyzer:
         self.MAX_ANGULAR_SPEED = 1.0 # [radians/sec]
         self.MAX_LINEAR_SPEED = 1.0 # [m/sec]
         self.MAX_CENTRIPETAL_ACCELERATION = centripetal_acceleration * scaler # [m/sec^2]
+        # initializer flags for auto-tuning pid tests; used upon initializing by evaluating PID coefficients in PIDTuner the first time by a callable error supplier on performance error
+        self.init_pid_tuning = True
         
         # tuned ANG pid (input = (kp=4.0,ki=0.0001,kd=4.0)) output = (kp=5.196,ki=0.000734,kd=1.035) [NO LIN pid]
         # pid feedback coefficients (linear and angular differential speed PID)
-        self.ANG_KP, self.ANG_KI, self.ANG_KD = 5.196, 0.000734, 1.035
-        self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.0, 0.001, 0.5 
+        # tuned coefficients: 
+        #self.ANG_KP, self.ANG_KI, self.ANG_KD = 5.196, 0.000734, 1.035
+        #self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.0, 0.001, 0.5 
         
+        # tuning attempt #2 coefficients:
+        #self.ANG_KP, self.ANG_KI, self.ANG_KD = 6.00000, 0.00010, 5.65625
+        #self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.13916, 0.00090, 0.42188
+        # tuning attempt #3 coefficients:
+        self.ANG_KP, self.ANG_KI, self.ANG_KD = 8.765625, 0.000835, 8.179688
+        self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.050781, 0.002802, 1.097656
+
+        # base coefficients
+        #self.ANG_KP, self.ANG_KI, self.ANG_KD = 4.0, 0.0001, 4.0
+        #self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.0, 0.001, 0.5 
+
+        self.ANG_KP, self.ANG_KI, self.ANG_KD = 6.0, 0.000630, 6.0
+        self.LIN_KP, self.LIN_KI, self.LIN_KD = 0.347656, 0.001808, 1.097656
+        
+
     def configureNavMotionProfilingCriteria(self, acceleration: float, max_lin_speed: float, max_ang_speed: float, max_centripetal_acceleration: float): 
         """
         Configures motion profiling criteria for spline path driving navigation given a fixed acceleration rate and upper bounded motion constraints. 
@@ -68,7 +86,7 @@ class NavAnalyzer:
         except rospy.ServiceException as e:
             rospy.logerr("NavAnalyzer.py: exception thrown: service call failed => exception: " + e.__str__())
 
-    def requestNavSimTest(self, lin_kp: float, lin_ki: float, lin_kd: float, ang_kp: float, ang_ki: float, ang_kd: float):
+    def requestNavSimTest(self, lin_kp: float, lin_ki: float, lin_kd: float, ang_kp: float, ang_ki: float, ang_kd: float, zero_error_bounds: bool, dynamic_error_bounds: bool):
         """
         Requests a navigation simulation test for spline driving to be run given specified navigation feedback PID coefficients to return the position and heading error
         by comparing the recorded positioning of the robot against the spline path being followed. 
@@ -78,13 +96,15 @@ class NavAnalyzer:
         param: ang_kp [float] The specified proportional coefficient for angular speed feedback control
         param: ang_ki [float] The specified integral coefficient for angular speed feedback control
         param: ang_kd [float] The specified derivative coefficient for angular speed feedback control
+        param: zero_error_bounds [bool] Specifies whether or not NMSE max error bounds should be set to zero. 
+        param: dynamic_error_bounds [bool] Specifies whether or not NMSE max error bounds should be allowed to take on any new-found calculated larger bounds. 
         returns: The position error and heading error of the overall path driven compared to spline path followed
         """
         rospy.loginfo("NavAnalyzer.py: Requesting navigation simulation test from \'/navigation/sim_test\' service")
         rospy.wait_for_service("/navigation/sim_test")
         try:
             client = rospy.ServiceProxy("/navigation/sim_test", GetNavSimTest)
-            response = client(linear_kp=lin_kp, linear_ki=lin_ki, linear_kd=lin_kd, angular_kp=ang_kp, angular_ki=ang_ki, angular_kd=ang_kd)
+            response = client(linear_kp=lin_kp, linear_ki=lin_ki, linear_kd=lin_kd, angular_kp=ang_kp, angular_ki=ang_ki, angular_kd=ang_kd, zero_error_bounds=zero_error_bounds, dynamic_error_bounds=dynamic_error_bounds)
             if response is None:
                 rospy.logerr("NavAnalyzer.py: error: failed to retrieve successful test results")
                 exit()
@@ -94,40 +114,6 @@ class NavAnalyzer:
             rospy.logerr("NavAnalyzer.py: exception thrown: service call failed => exception: " + e.__str__())
         return None
             
-    def resetRobot(self):
-        """
-        Resets robot position and speeds.
-        """
-        rospy.loginfo("NavAnalyzer.py: Requesting robot reset in Gazebo from \'/gazebo/set_model_state'\' service")
-        rospy.wait_for_service("/gazebo/set_model_state")
-        try: 
-            client = rospy.ServiceProxy("/gazebo/set_model_state", SetModelState)
-            # Define the new state
-            state_msg = ModelState()
-            state_msg.model_name = 'robot' 
-            state_msg.pose.position.x = 0.0
-            state_msg.pose.position.y = 0.0
-            state_msg.pose.position.z = 0.0
-            state_msg.pose.orientation.x = 0.0
-            state_msg.pose.orientation.y = 0.0
-            state_msg.pose.orientation.z = 0.0
-            state_msg.pose.orientation.w = 1.0
-            state_msg.twist.linear.x = 0.0
-            state_msg.twist.linear.y = 0.0
-            state_msg.twist.linear.z = 0.0
-            state_msg.twist.angular.x = 0.0
-            state_msg.twist.angular.y = 0.0
-            state_msg.twist.angular.z = 0.0
-            state_msg.reference_frame = 'world'
-
-            response = client(state_msg)
-            if response is None:
-                rospy.logerr("NavAnalyzer.py: error: failed to reset robot state with service")
-                exit()
-            rospy.loginfo("NavAnalyzer.py: robot reset service ended successfully")
-        except rospy.ServiceException as e:
-            rospy.logerr("NavAnalyzer.py: exception thrown: service call failed => exception: " + e.__str__())
-
     def resetGazebo(self):
         """
         Requests a Gazebo World Simulation.
@@ -144,51 +130,83 @@ class NavAnalyzer:
         except rospy.ServiceException as e:
             rospy.logerr("NavAnalyzer.py: exception thrown: service call failed => exception: " + e.__str__())
 
-    def run(self):
+    def tuneFeedbackPID(self, lin_kp: float, lin_ki: float, lin_kd: float, ang_kp: float, ang_ki: float, ang_kd: float):
+        """
+        Tunes and refines feedback PID coefficients for linear and angular speed feedback control given specified initial coefficients to start with when tuning; 
+        prints out tuning results and returns them as a vector in the same order as the parameters are given. 
+        param: ang_kp [float] The specified angular speed proportional coefficient
+        param: ang_ki [float] The specified angular speed integral coefficient
+        param: ang_kd [float] The specified angular speed derivative coefficient
+        param: lin_kp [float] The specified linear speed proportional coefficient
+        param: lin_ki [float] The specified linear speed integral coefficient
+        param: lin_kd [float] The specified linear speed derivative coefficient
+        returns: the discovered tuned coefficients
+        """
         # initialize profiling criteria
         self.configureNavMotionProfilingCriteria(self.ACCELERATION, self.MAX_LINEAR_SPEED, self.MAX_ANGULAR_SPEED, self.MAX_CENTRIPETAL_ACCELERATION)
+        # initialize pid testing handler functions
+        self.init_pid_tuning = True
 
         # test to complete to compute angular pid error
         def angular_pid_test(kp: float, ki: float, kd: float) -> float:
+            # intialize, wait, and reset
             self.resetGazebo()
             try:
                 rospy.sleep(1)
             except: 
-                rospy.logwarn("NavAnalyzier.py: Warning: rospy.sleep() failed likely due to ros time rollback from sim reset")
-            pos_err, ang_err = self.requestNavSimTest(lin_kp=self.LIN_KP, lin_ki=self.LIN_KI, lin_kd=self.LIN_KD, ang_kp=kp, ang_ki=ki, ang_kd=kd)
+                rospy.logwarn("NavAnalyzer.py: Warning: rospy.sleep() failed likely due to ros time rollback from sim reset")
+            # simulate test for averaged error
+            pos_err, ang_err = self.requestNavSimTest(lin_kp=lin_kp, lin_ki=lin_ki, lin_kd=lin_kd, ang_kp=kp, ang_ki=ki, ang_kd=kd, zero_error_bounds=False, dynamic_error_bounds=self.init_pid_tuning)
             error = (pos_err + ang_err) / 2.0
-            print("ANG: Position error: " + format(100.0*pos_err, '.3') + "%, Heading error: " + format(100.0*ang_err, '.3') + "%")
+
+            # output status and return error results
+            status = "NavAnalyzer.py: ANG: Position error: " + format(100.0*pos_err, '.5f') + "%, Heading error: " + format(100.0*ang_err, '.5f') + "%, Avg error: " + format(100.0*error, '.5f') + "%"
+            rospy.loginfo(f"{handler.str_bold_start}{status}{handler.str_bold_end}")
+            self.init_pid_tuning = False
             return error
         # test to complete to compute linear pid error
         def linear_pid_test(kp: float, ki: float, kd: float) -> float:
+            # initialize, wait, and reset
             self.resetGazebo()
             try:
                 rospy.sleep(1)
             except: 
-                rospy.logwarn("NavAnalyzier.py: Warning: rospy.sleep() failed likely due to ros time rollback from sim reset")
-            pos_err, ang_err = self.requestNavSimTest(lin_kp=kp, lin_ki=ki, lin_kd=kd, ang_kp=self.ANG_KP, ang_ki=self.ANG_KI, ang_kd=self.ANG_KD)
+                rospy.logwarn("NavAnalyzer.py: Warning: rospy.sleep() failed likely due to ros time rollback from sim reset")
+            # simulate test for averaged error
+            pos_err, ang_err = self.requestNavSimTest(lin_kp=kp, lin_ki=ki, lin_kd=kd, ang_kp=ang_kp, ang_ki=ang_ki, ang_kd=ang_kd, zero_error_bounds=False ,dynamic_error_bounds=self.init_pid_tuning)
             error = (pos_err + ang_err) / 2.0
-            print("LIN: Position error: " + format(100.0*pos_err, '.3') + "%, Heading error: " + format(100.0*ang_err, '.3') + "%")
+            
+            # output status and return error results 
+            status = "NavAnalyzer.py: LIN: Position error: " + format(100.0*pos_err, '.5f') + "%, Heading error: " + format(100.0*ang_err, '.5f') + "%, Avg error: " + format(100.0*error, '.5f') + "%"
+            rospy.loginfo(f"{handler.str_bold_start}{status}{handler.str_bold_end}")
+            self.init_pid_tuning = False
             return error
         
         # pid controller auto-tuners
-        angular_pid_tuner = PIDTuner(self.ANG_KP, self.ANG_KI, self.ANG_KD, 1.0, 0.0001, 2.0, angular_pid_test)
-        linear_pid_tuner = PIDTuner(self.LIN_KP, self.LIN_KI, self.LIN_KD, 1.0, 0.0001, 1.0, linear_pid_test)
+        angular_pid_tuner = PIDTuner(ang_kp, ang_ki, ang_kd, 3.0, 0.001, 3.0, angular_pid_test)
+        linear_pid_tuner = PIDTuner(lin_kp, lin_ki, lin_kd, 3.0, 0.001, 3.0, linear_pid_test)
 
-        # set auto tuner(s) coefficient error logging files 
+         # set auto tuner(s) coefficient error logging files 
         root_dir = handler.get_ros_package_root("ROS_SplinePathMotionProfiling")
         rel_pid_err_log_dir = "/pid_tuning_err_logs/"
-        angular_pid_tuner.setErrorLog(root_dir + rel_pid_err_log_dir, "ang_kp_err_log.csv", "ang_ki_err_log.csv", "ang_kd_err_log.csv")
-        linear_pid_tuner.setErrorLog(root_dir + rel_pid_err_log_dir, "lin_kp_err_log.csv", "lin_ki_err_log.csv", "lin_kd_err_log.csv")
+        angular_pid_tuner.setErrorLog(root_dir + rel_pid_err_log_dir, "err_log2.csv", "err_log2.csv", "err_log2.csv")
+        linear_pid_tuner.setErrorLog(root_dir + rel_pid_err_log_dir, "err_log2.csv", "err_log2.csv", "err_log2.csv")
 
         # tune coefficients
-        self.ANG_KP, self.ANG_KI, self.ANG_KD = angular_pid_tuner.tune(10, 10, 10, True)
-        self.LIN_KP, self.LIN_KI, self.LIN_KD = linear_pid_tuner.tune(10, 10, 10, True)
-        self.ANG_KP, self.ANG_KI, self.ANG_KD = angular_pid_tuner.tune(4, 4, 4, True)
+        ang_kp, ang_ki, ang_kd = angular_pid_tuner.tune(15, 15, 15, True)
+        lin_kp, lin_ki, lin_kd = linear_pid_tuner.tune(15, 15, 15, True)
+        ang_kp, ang_ki, ang_kd = angular_pid_tuner.tune(10, 10, 10, True)
 
         print("Found Coefficients: ")
-        print("Angular: kp = " + format(self.ANG_KP, '.4') + ", ki = " + format(self.ANG_KI, '.4') + ", kd = " + format(self.ANG_KD, '.4'))
-        print("Linear: kp = " + format(self.LIN_KP, '.4') + ", ki = " + format(self.LIN_KI, '.4') + ", kd = " + format(self.LIN_KD, '.4'))
+        print("Angular: kp = " + format(float(ang_kp), '.6f') + ", ki = " + format(float(ang_ki), '.6f') + ", kd = " + format(float(ang_kd), '.6f'))
+        print("Linear: kp = " + format(float(lin_kp), '.6f') + ", ki = " + format(float(lin_ki), '.6f') + ", kd = " + format(float(lin_kd), '.6f'))
+        return (lin_kp, lin_ki, lin_kd, ang_kp, ang_ki, ang_kd)
+
+    def run(self):
+        # initialize profiling criteria
+        self.configureNavMotionProfilingCriteria(self.ACCELERATION, self.MAX_LINEAR_SPEED, self.MAX_ANGULAR_SPEED, self.MAX_CENTRIPETAL_ACCELERATION)
+        # tune PID coefficients testing: 
+        self.tuneFeedbackPID(self.LIN_KP, self.LIN_KI, self.LIN_KD, self.ANG_KP, self.ANG_KI, self.ANG_KD)
         rospy.spin()
 
 if __name__ == "__main__":

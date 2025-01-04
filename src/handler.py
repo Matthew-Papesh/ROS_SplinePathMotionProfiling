@@ -7,6 +7,10 @@ from tf.transformations import quaternion_from_euler
 import rospkg
 import math
 
+# used for formatting printed bold text
+str_bold_start = "\033[1m"
+str_bold_end = "\033[0m"
+
 def get_ros_package_root(package_name):
     """
     Returns the root directory of a ROS package given its name.

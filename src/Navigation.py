@@ -13,7 +13,7 @@ import math
 import heapq
 
 # testing flags:
-INTERNAL_TESTING = False
+INTERNAL_TESTING = True
 
 class Navigation: 
 
@@ -22,7 +22,6 @@ class Navigation:
         Initializes a Navigation node.
         """
         rospy.init_node("navigation", anonymous=True)
-
         self.node_rate = rospy.Rate(10)
         self.current_pose = PoseStamped()
 
@@ -39,26 +38,28 @@ class Navigation:
         self.MAX_LINEAR_SPEED = 0.0 # [m/sec]
         self.MAX_ANGULAR_SPEED = 0.0 # [m/sec]
         self.MAX_CENTRIPETAL_ACCELERATION = 0.0 # [m/sec^2]
+        # dynamic maximums for path driving errors 
+        self.MAX_POSITION_ERROR = 0.0
+        self.MAX_HEADING_ERROR = 0.0
 
         # pid feedback coefficients (linear and angular differential speed PID)
         #self.ANG_KP, self.ANG_KI, self.ANG_KD = 4.0, 0.0001, 4.0
-        self.ANG_KP, self.ANG_KI, self.ANG_KD = 5.196, 0.000734, 1.035
+        #self.ANG_KP, self.ANG_KI, self.ANG_KD = 5.196, 0.000734, 1.035
         # LIN_KP bounds: [0.0, 2.0] not at or above 2.0 ideal=1.0
-        self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.0, 0.001, 0.5 # INIT ERR: Position error: 5.5162%, Heading error: 0.74635% => AVG ERR (pos err: 5.2042 %, heading err: 0.65 %)
+        #self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.0, 0.001, 0.5 # INIT ERR: Position error: 5.5162%, Heading error: 0.74635% => AVG ERR (pos err: 5.2042 %, heading err: 0.65 %)
 
-        #self.ANG_KP, self.ANG_KI, self.ANG_KD = 3.658, -0.0009141, 14.16
-        #self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.022, 0.000, -0.7178
+        #self.ANG_KP, self.ANG_KI, self.ANG_KD = 5.758, 0.0006434, 2.535
+        #self.LIN_KP, self.LIN_KI, self.LIN_KD = 0.8516, 0.001006, 0.9102
+        # tuning attempt #2 coefficients:
+        #self.ANG_KP, self.ANG_KI, self.ANG_KD = 6.00000, 0.00010, 5.65625
+        #self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.13916, 0.00090, 0.42188
+        # tuning attempt #3 coefficients:
+        #self.ANG_KP, self.ANG_KI, self.ANG_KD = 6.0, 0.000630, 6.0
+        #self.LIN_KP, self.LIN_KI, self.LIN_KD = 0.347656, 0.001808, 1.097656
 
-        # SECOND AUTOTUNING TEST (NO LIN PID, INITIAL ANG PID = (kp,ki,kd) = (4.0, 0.0001, 4.0)) => Results: (kp,ki,kd) = (5.196, 0.000734, 1.035)
-        # Terminal: [INTERNAL TEST]
-        # /gaz/src/ROS_SplinePathMotionProfiling$ rosrun ROS_SplinePathMotionProfiling Navigation.py 
-        # [INFO] [1735796961.040648, 4.877000]: Navigation.py: Requesting simple spline path from '/quintic_spline_path/simple_spline_plan' service
-        # [INFO] [1735796961.077613, 4.913000]: Navigation.py: simple spline path service ended; returning path
-        # [INFO] [1735797008.462992, 52.219000]: Navigation.py: Position error: 16.038%, Heading error: 1.1092%
-        # /gaz/src/ROS_SplinePathMotionProfiling$ rosrun ROS_SplinePathMotionProfiling Navigation.py 
-        # [INFO] [1735797120.130612, 5.762000]: Navigation.py: Requesting simple spline path from '/quintic_spline_path/simple_spline_plan' service
-        # [INFO] [1735797120.168004, 5.798000]: Navigation.py: simple spline path service ended; returning path
-        # [INFO] [1735797167.550590, 53.103000]: Navigation.py: Position error: 5.5162%, Heading error: 0.74635%
+        # tuning attempt #3 coefficients:
+        self.ANG_KP, self.ANG_KI, self.ANG_KD = 8.765625, 0.000835, 8.179688
+        self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.050781, 0.002802, 1.097656
 
         self.initPublishers()
         self.initSubscribers()
@@ -312,7 +313,7 @@ class Navigation:
     
         return (linear_speeds, angular_speeds, radius)
 
-    def splineDrive(self, spline_path: Path, spline_sd_steps: list, spline_cumulative_sd_steps: list, acceleration: float, max_linear_speed: float, max_angular_speed: float, max_centripetal_acceleration: float) -> tuple[Path, float, float]:
+    def splineDrive(self, spline_path: Path, spline_sd_steps: list, spline_cumulative_sd_steps: list, acceleration: float, max_linear_speed: float, max_angular_speed: float, max_centripetal_acceleration: float) -> tuple[Path, float, float, float, float]:
         """
         Motion profiles and drives wheels speeds along a specified spline path given path poses, path arc distances, along with specified acceleration [m/sec^2], max linear speed [m/sec],
         max angular speed [radians/sec], and max centripetal acceleration [m/sec^2]. 
@@ -324,7 +325,8 @@ class Navigation:
         :param max_angular_speed [float] The specified max angular speed in [radians/sec] to profile by
         :param max_centripetal_acceleration [float] The specified max centripetal acceleration in [m/sec^2] to profile by
         
-        :returns a tuple of recorded path of how close the robot got to each waypoint, along with MSE error for position (x,y) and also heading in radians. (i.e.: tuple[Path=recorded_path, float=MSE_position, float=MSE_heading])
+        :returns a tuple of recorded path of how close the robot got to each waypoint, along with MSE error for position (x,y) and also heading in radians in addition to max erros. 
+        (i.e.: tuple[Path=recorded_path, float=MSE_position, float=MSE_heading, float=max_path_position_error, float=max_path_heading_error])
         """
         
         # current index point considered from a set of points about a base point on a spline path with a radius range of padding
@@ -372,7 +374,7 @@ class Navigation:
             # check if the robot is taking too long to progress along the path; end path driving if progession/expanding the frontier driven takes too long
             if prev_frontier_update_time > 0 and rospy.get_time() - prev_frontier_update_time > frontier_timeout:
                 self.setSpeed(0, 0) # stop driving, end early, and return pct performance errors of 100% to indicate faulty path driving
-                return (recorded_path, 1.0, 1.0)
+                return (recorded_path, 1.0, 1.0, 1.0, 1.0)
 
             # record the closest the robot drove to the point and compute error/best init pose of next point
             # if frontier expanded
@@ -407,32 +409,46 @@ class Navigation:
 
         # come to a stop and return data
         self.setSpeed(0, 0)
-        MSE_position_error = (MSE_position_error / len(recorded_path.poses)) / max_position_error
-        MSE_heading_error = (MSE_heading_error / len(recorded_path.poses)) / max_heading_error
-        return (recorded_path, MSE_position_error, MSE_heading_error)
+        MSE_position_error = MSE_position_error / len(recorded_path.poses)
+        MSE_heading_error = MSE_heading_error / len(recorded_path.poses)
+        return (recorded_path, MSE_position_error, MSE_heading_error, max_position_error, max_heading_error)
 
-    def driveSplinePath(self, waypoints: list, acceleration: float, max_linear_speed: float, max_angular_speed: float, max_centripetal_acceleration: float) -> tuple[Path, float, float]:
+    def driveSplinePath(self, waypoints: list, acceleration: float, max_linear_speed: float, max_angular_speed: float, max_centripetal_acceleration: float, update_error_bounds: bool) -> tuple[Path, float, float]:
         """
         Drives a path of splines given waypoints to constrain the spline onto with motion profiling constraints of acceleration [m/sec^2], 
-        max linear speed [m/sec], max angular speed [radians/sec], and max centripetal acceleration [m/sec^2].
+        max linear speed [m/sec], max angular speed [radians/sec], and max centripetal acceleration [m/sec^2]. The recorded path is returned alongside
+        percent errors for position and heading; perence errors are MSE normalized over the current respective max path position and heading errors. Max errors 
+        can be susceptible to being update to larger values if specified so. This approach allows for maximums to be fixed across many paths driven for comparable 
+        spline driving performance errors. 
+
         :param waypoints [list] The specified list of pose vectors for each waypoint of which the spline path should intersect through
         :param acceleration [float] The specified acceleration in [m/sec^2] to profile by
         :param max_linear_speed [float] The specified max linear speed in [m/sec] to profile by
         :param max_angular_speed [float] The specified max angular speed in [radians/sec] to profile by
         :param max_centripetal_acceleration [float] The specified max centripetal acceleration in [m/sec^2] to profile by
+        :param update_error_bounds [bool] Specifies whether or not error max bounds are updatable to new-found maxes are calculated
 
-        :returns a tuple of recorded path of how close the robot got to each waypoint, along with MSE error for position (x,y) and also heading in radians. (i.e.: tuple[Path=recorded_path, float=MSE_position, float=MSE_heading])
+        :returns a tuple of recorded path of how close the robot got to each waypoint, along with pct error for position (x,y) and also heading in radians in addition to max errors. 
+        (i.e.: tuple[Path=recorded_path, float=MSE_position, float=MSE_heading, float=max_path_position_error, float=max_path_heading_error])
         """
         # add initial robot position to the front of the waypoints and request interpolated spline path. 
         waypoints = [(self.current_pose.pose.position.x, self.current_pose.pose.position.y, handler.get_heading(self.current_pose))] + waypoints
         spline_plan = self.requestSimpleSplinePlan(waypoints)
         # drive spline given computed spline path and motion profiling constraints. 
-        recorded_path, MSE_position, MSE_heading = self.splineDrive(spline_plan[0], spline_plan[1], spline_plan[2], acceleration, max_linear_speed, max_angular_speed, max_centripetal_acceleration)
-        return (recorded_path, MSE_position, MSE_heading)
+        recorded_path, MSE_position, MSE_heading, max_path_position_error, max_path_heading_error = self.splineDrive(spline_plan[0], spline_plan[1], spline_plan[2], acceleration, max_linear_speed, max_angular_speed, max_centripetal_acceleration)
+        # enable max error bounds to be susceptible to being updated to higher bounds if specified so
+        if update_error_bounds:
+            self.MAX_POSITION_ERROR = max(self.MAX_POSITION_ERROR, max_path_position_error)
+            self.MAX_HEADING_ERROR = max(self.MAX_HEADING_ERROR, max_path_heading_error)
+        # compute NMSE relative to global erorr maximums
+        position_pct_error = MSE_position / handler.non_zero(self.MAX_POSITION_ERROR, 0.00001)
+        heading_pct_error = MSE_heading / handler.non_zero(self.MAX_HEADING_ERROR, 0.00001)
+        # return results
+        return (recorded_path, position_pct_error, heading_pct_error)
 
     def handleSetMotionProfilingService(self, request):
         """
-        Represents the service for specifying motion criteria for spline path driving.  
+        Represents the service for specifying motion criteria for spline path driving.
         """
         rospy.loginfo("Navigation.py: motion profiling properties service request heard")
         self.ACCELERATION = request.acceleration
@@ -450,23 +466,29 @@ class Navigation:
         # set specified pid coefficients
         self.LIN_KP, self.LIN_KI, self.LIN_KD = request.linear_kp, request.linear_ki, request.linear_kd
         self.ANG_KP, self.ANG_KI, self.ANG_KD = request.angular_kp, request.angular_ki, request.angular_kd
+        # zeros universal error bounds if specified so 
+        if request.zero_error_bounds:
+            self.MAX_POSITION_ERROR = 0.0
+            self.MAX_HEADING_ERROR = 0.0
         # run test
-        _, MSE_position, MSE_heading = self.test()
+        _, MSE_position, MSE_heading = self.test(update_error_bounds=request.dynamic_error_bounds)
         return GetNavSimTestResponse(position_error=MSE_position, heading_error=MSE_heading)
 
-    def test(self) -> tuple[Path, float, float]:
+    def test(self, update_error_bounds: bool) -> tuple[Path, float, float]:
         """
         Conducts a spline path driving simulation with the current motion profiling criteria. 
-        :returns a tuple of recorded path of how close the robot got to each waypoint, along with MSE error for position (x,y) and also heading in radians. (i.e.: tuple[Path=recorded_path, float=MSE_position, float=MSE_heading])
+        :param update_error_bounds [bool] Specifies whether or not error max bounds are updatable to new-found maxes are calculated
+        :returns a tuple of recorded path of how close the robot got to each waypoint, along with NMSE error for position (x,y) and also heading in radians. 
+        (i.e.: tuple[Path=recorded_path, float=MSE_position, float=MSE_heading])
         """
         # waypoints to travel through along spline path: (waypoint = (x, y, radians))
         waypoints = [(4,2,-math.pi/4.0), (5,1,-math.pi/2.0), (4, 0, -math.pi*3.0/4.0), (0, 0, math.pi)]
-        recorded_path, MSE_position, MSE_heading = self.driveSplinePath(waypoints, self.ACCELERATION, self.MAX_ANGULAR_SPEED, self.MAX_LINEAR_SPEED, self.MAX_CENTRIPETAL_ACCELERATION)
+        recorded_path, position_pct_error, heading_pct_error = self.driveSplinePath(waypoints, self.ACCELERATION, self.MAX_ANGULAR_SPEED, self.MAX_LINEAR_SPEED, self.MAX_CENTRIPETAL_ACCELERATION, update_error_bounds)
         try:
             self.node_rate.sleep()
         except:
             pass
-        return (recorded_path, MSE_position, MSE_heading)
+        return (recorded_path, position_pct_error, heading_pct_error)
 
     def internalTest(self):
 
@@ -481,7 +503,7 @@ class Navigation:
         self.MAX_ANGULAR_SPEED = 1.0 # [radians/sec]
         self.MAX_LINEAR_SPEED = 1.0 # [m/sec]
         self.MAX_CENTRIPETAL_ACCELERATION = centripetal_acceleration * scaler # [m/sec^2]
-        _, MSE_position, MSE_heading = self.test()
+        _, MSE_position, MSE_heading = self.test(update_error_bounds=True)
         # print results:
         rospy.loginfo("Navigation.py: Position error: " + format(100.0*MSE_position, '.5') + "%, Heading error: " + format(100.0*MSE_heading, '.5') + "%")
 

@@ -4,6 +4,8 @@ float64 linear_kd
 float64 angular_kp
 float64 angular_ki
 float64 angular_kd
+bool zero_error_bounds
+bool dynamic_error_bounds
 ---
 float64 position_error
 float64 heading_error
