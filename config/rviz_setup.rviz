@@ -10,6 +10,7 @@ Panels:
         - /TF1/Tree1
         - /GridCells1
         - /GridCells2
+        - /GridCells3
       Splitter Ratio: 0.6029411554336548
     Tree Height: 651
   - Class: rviz/Selection
@@ -211,6 +212,15 @@ Visualization Manager:
       Topic: /navigation/spline_gridcells
       Unreliable: false
       Value: true
+    - Alpha: 1
+      Class: rviz/GridCells
+      Color: 25; 25; 200
+      Enabled: true
+      Name: GridCells
+      Queue Size: 10
+      Topic: /navigation/recorded_driving_gridcells
+      Unreliable: false
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 108; 108; 108
@@ -239,7 +249,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/XYOrbit
-      Distance: 2.455714702606201
+      Distance: 5.973048210144043
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -247,9 +257,9 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 1.5427128076553345
-        Y: -0.6811407804489136
-        Z: 2.384185791015625e-06
+        X: 0.7321662902832031
+        Y: -0.4743027687072754
+        Z: 2.384185791015625e-07
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false

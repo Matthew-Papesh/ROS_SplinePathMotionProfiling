@@ -82,7 +82,7 @@ def get_path(origin: tuple[float, float], resolution: float, x_coords: list, y_c
         path.poses.append(get_pose_stamped(x, y, theta))
     return path
 
-def get_gridcells(origin: tuple[float, float], resolution: float, map_x_coords: list, map_y_coords: list) -> GridCells:
+def get_gridcells_by_list(origin: tuple[float, float], resolution: float, map_x_coords: list, map_y_coords: list) -> GridCells:
     """
     Returns a GridCells type in world frame of reference for a specified list of coordinate pairs 
     in a map with a origin position and resolution in the world frame. 
@@ -101,6 +101,26 @@ def get_gridcells(origin: tuple[float, float], resolution: float, map_x_coords: 
         cell = Point()
         cell.x = origin[0] + float(map_x_coords[i]) * resolution
         cell.y = origin[1] + float(map_y_coords[i]) * resolution
+        gridcells.cells.append(cell)
+    return gridcells
+
+def get_gridcells_by_path(origin: tuple[float, float], resoultion: float, map_path: Path) -> GridCells:
+    """
+    Returns a GridCells type in a world frame of reference for a specified Path type in a map with a
+    origin position and resolution in the world frame. 
+    param: origin [tuple[float, float]] The specified origin position of the map in world coordinates
+    param: resolution [float] The specified transfer rate from map to world coordinates
+    param: map_path [Path] The specified Path type to record as GridCells
+    returns: a gridcells type of the specified map path
+    """
+    gridcells = GridCells()
+    gridcells.cell_width = 0.05
+    gridcells.cell_height = 0.05
+    gridcells.header.frame_id = "map"
+    for pose in map_path.poses:
+        cell = Point()
+        cell.x = origin[0] + pose.pose.position.x * resoultion
+        cell.y = origin[1] + pose.pose.position.y * resoultion
         gridcells.cells.append(cell)
     return gridcells
 

@@ -132,7 +132,7 @@ class QuinticSplinePath:
 
     def plotGridcells(self, path_x: list, path_y: list, plot: bool) :
         if plot:
-            gridcells = handler.get_gridcells((0, 0), 1.0, path_x, path_y)
+            gridcells = handler.get_gridcells_by_list((0, 0), 1.0, path_x, path_y)
             self.spline_gridcells_publisher.publish(gridcells)
 
     def getInterpolatedSpline(self, waypoints: list[PoseStamped]) -> tuple[list, list, list, list]:

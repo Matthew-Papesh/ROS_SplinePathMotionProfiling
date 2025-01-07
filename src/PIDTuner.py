@@ -200,34 +200,38 @@ class PIDTuner:
         # tuning phase #1 => reset ranges for all coefficients (kp, ki, and kd) for first few phases
         kp_error_log = self.step(k_type=ktype.KP, epochs=int(max(1, kp_epochs)), prompt="[kp-test, phase 1.1] : ")
         kd_error_log = self.step(k_type=ktype.KD, epochs=int(max(1, kd_epochs)), prompt="[kd-test, phase 1.2] : ")
-        self.resetRange()
+        self.resetRange(1.0)
         # tuning phase #2
         kp_error_log = kp_error_log + self.step(k_type=ktype.KP, epochs=int(max(1, kp_epochs)), prompt="[kp-test, phase 2.1] : ")
         kd_error_log = kd_error_log + self.step(k_type=ktype.KD, epochs=int(max(1, kd_epochs)), prompt="[kd-test, phase 2.2] : ")
-        self.resetRange()
+        self.resetRange(1.0)
         # tuning phase #3
-        ki_error_log = self.step(k_type=ktype.KI, epochs=int(max(1, ki_epochs)), prompt="[ki-test, phase 3] : ")
+        kp_error_log = kp_error_log + self.step(k_type=ktype.KP, epochs=int(max(1, kp_epochs)), prompt="[kp-test, phase 3.1] : ")
+        kd_error_log = kd_error_log + self.step(k_type=ktype.KD, epochs=int(max(1, kd_epochs)), prompt="[kd-test, phase 3.2] : ")
+        self.resetRange(1.0)
+        # ki_error_log = self.step(k_type=ktype.KI, epochs=int(max(1, ki_epochs)), prompt="[ki-test, phase 3] : ")
         # tuning phase #4 => maintain ranges without reset for greater precision; just revisit all coefficients a final time
-        kp_error_log = kp_error_log + self.step(k_type=ktype.KP, epochs=int(max(1, kp_epochs/2)), prompt="[kp-test, phase 4.1] : ")
-        kd_error_log = kd_error_log + self.step(k_type=ktype.KD, epochs=int(max(1, kd_epochs/2)), prompt="[kd-test, phase 4.2] : ")
-        ki_error_log = ki_error_log + self.step(k_type=ktype.KI, epochs=int(max(1, ki_epochs/2)), prompt="[ki-test, phase 4.3] : ")
-        self.resetRange()
+        kp_error_log = kp_error_log + self.step(k_type=ktype.KP, epochs=int(max(1, kp_epochs)), prompt="[kp-test, phase 4.1] : ")
+        kd_error_log = kd_error_log + self.step(k_type=ktype.KD, epochs=int(max(1, kd_epochs)), prompt="[kd-test, phase 4.2] : ")
+        # ki_error_log = ki_error_log + self.step(k_type=ktype.KI, epochs=int(max(1, ki_epochs/2)), prompt="[ki-test, phase 4.3] : ")
+        self.resetRange(1.0)
 
         # record log errors
         if log_error:
             self.logError(self.kp_error_file, kp_error_log)
-            self.logError(self.ki_error_file, ki_error_log)
+            #self.logError(self.ki_error_file, ki_error_log)
             self.logError(self.kd_error_file, kd_error_log)
         # return tuned coefficients
         return (self.opt_kp, self.opt_ki, self.opt_kd)
 
-    def resetRange(self):
+    def resetRange(self, multiplier: float):
         """
         Resets pid coefficient ranges to their initial values before any tuning
+        param: multiplier [float] Resets the range to initial values multiplied by the specified value
         """
-        self.kp_range = self.init_kp_range
-        self.ki_range = self.init_ki_range
-        self.kd_range = self.init_kd_range
+        self.kp_range = self.init_kp_range * multiplier
+        self.ki_range = self.init_ki_range * multiplier
+        self.kd_range = self.init_kd_range * multiplier
 
     def reset(self):
         """
@@ -236,4 +240,4 @@ class PIDTuner:
         self.opt_kp = self.init_kp
         self.opt_ki = self.init_ki
         self.opt_kd = self.init_kd    
-        self.resetRange()
+        self.resetRange(1.0)
