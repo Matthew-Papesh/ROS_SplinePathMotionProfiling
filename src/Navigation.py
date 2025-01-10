@@ -51,13 +51,26 @@ class Navigation:
         # pid feedback coefficients (linear and angular differential speed PID)
         #self.ANG_KP, self.ANG_KI, self.ANG_KD = 4.0, 0.0001, 4.0
         #self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.0, 0.001, 0.5 
+        # PCT TEST #1
+        self.ANG_KP, self.ANG_KI, self.ANG_KD = 15.265625, 0.0000835, 14.829688
+        self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.050781, 0.002802, 1.097656  
+        # Found Coefficients: 
+        # Angular: kp = 15.152344, ki = 0.000083, kd = 15.357032
+        # Linear: kp = 1.050781, ki = 0.002802, kd = 1.097656
 
-        # tuning attempt #3 coefficients:
-        self.ANG_KP, self.ANG_KI, self.ANG_KD = 8.765625, 0.0000835, 8.579688
-        self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.050781, 0.002802, 1.097656
-
-        #self.ANG_KP, self.ANG_KI, self.ANG_KD  = 16.397583, 0.000083, 16.615012
+        # PCT TEST #2
+        #self.ANG_KP, self.ANG_KI, self.ANG_KD = 15.152344, 0.000083, 15.357032
         #self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.050781, 0.002802, 1.097656
+        # Found Coefficients: 
+        # Angular: kp = 14.990235, ki = 0.000083, kd = 15.184766
+        # Linear: kp = 1.050781, ki = 0.002802, kd = 1.097656
+
+        # PCT TEST #3
+        #self.ANG_KP, self.ANG_KI, self.ANG_KD = 14.990235, 0.000083, 15.184766
+        #self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.050781, 0.002802, 1.097656
+        # Found Coefficients: 
+        # Angular: kp = 15.097657, ki = 0.000083, kd = 14.949805
+        # Linear: kp = 1.050781, ki = 0.002802, kd = 1.097656
 
         self.initPublishers()
         self.initSubscribers()
@@ -392,8 +405,10 @@ class Navigation:
             position_x_pct_error = (self.current_pose.pose.position.x - spline_path.poses[index].pose.position.x) / (2.0 * self.TURTLEBOT3_RADIUS)
             position_y_pct_error = (self.current_pose.pose.position.y - spline_path.poses[index].pose.position.y) / (2.0 * self.TURTLEBOT3_RADIUS)
             position_error = handler.euclid_distance((0,0), (position_x_pct_error, position_y_pct_error))
+            
             # check if the robot is taking too long to progress along the path; end path driving if progession/expanding the frontier driven takes too long
-            if prev_frontier_update_time > 0 and rospy.get_time() - prev_frontier_update_time > frontier_timeout:
+            # provided the robot has driven a "sufficient" distance from the starting point; let the sufficient distance be the padding used for aproximating current position
+            if index > padding and prev_frontier_update_time > 0 and rospy.get_time() - prev_frontier_update_time > frontier_timeout:
                 self.setSpeed(0, 0) # stop driving, end early, and return pct performance errors of 100% to indicate faulty path driving
                 return (recorded_path, 1.0, 1.0)
 
@@ -521,7 +536,7 @@ class Navigation:
         # conduct testing internally if specified so
         if INTERNAL_TESTING: 
             # let internal testing conduct trials of simulations over specified motion profiling criterial and PID feedback coefficients
-            epochs = 1
+            epochs = 50
             valid_epochs = epochs
             avg_position_error, avg_heading_error = 0.0, 0.0
             # step through trials/epochs for each sim test
@@ -529,11 +544,15 @@ class Navigation:
                 # conduct trial, reset, and track valid trials to average over at the end of testing
                 position_error, heading_error = self.internalTest()
                 self.resetRobot()
-                if position_error < 1 and heading_error < 1:
-                    avg_position_error += position_error
-                    avg_heading_error += heading_error
-                else:
-                    valid_epochs -= 1
+                # add failed attempts
+                avg_position_error += position_error
+                avg_heading_error += heading_error
+                
+                #if position_error < 1 and heading_error < 1:
+                #    avg_position_error += position_error
+                #    avg_heading_error += heading_error
+                #else:
+                #    valid_epochs -= 1
 
             # handle internal testing results based on averaged valid trials
             if valid_epochs > 0:

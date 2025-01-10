@@ -26,7 +26,7 @@ class SimulationSpeed:
             properties = get_physics_client()
 
             # update real-tome update rate for current properties
-            properties.time_step = 0.001
+            properties.time_step = 0.0005
             properties.max_update_rate = update_rate
 
             # set new physics properties
@@ -42,7 +42,7 @@ class SimulationSpeed:
             rospy.logerr("SimulationSpeed.py exception thrown: service call failed => exception: " + e.__str__())
 
     def run(self):
-        update_rate = 1000
+        update_rate = 4000
         self.setSimulationSpeed(update_rate)
         rospy.spin()
 
