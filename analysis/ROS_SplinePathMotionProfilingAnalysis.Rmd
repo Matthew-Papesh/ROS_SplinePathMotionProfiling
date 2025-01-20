@@ -1,0 +1,60 @@
+---
+title: "ROS_SplinePathMotionProfiling_Analysis"
+author: "Matthew Papesh"
+output: html_document
+date: "2025-01-19"
+---
+
+## Abstract: 
+
+#### A great amount of robotics involves the driving of autonomous robots. Many come in the form of a two-wheeled or differential drive chassis. Meanwhile with so many algorithms and methods of programming how a robot should drive, such as point-to-point. However, approaches of driving such as point-to-point requires point-turns following execessive turning, and rigid path following regardless of if it involves motion profiling. 
+
+#### With respect to discussing specifically differential drive robots, following more organic or curved paths to a destination or traveling through specified positions can be a much more efficient means of driving. This can be done by driving along quintic spline paths generated from specified waypoints such that the robot travels to all needed locations with unecessary stops as a single fluid motion characterized by an overlayed motion profile and then auto-corrected by a PID feedback system. This concept leads into the idea of ROS spline path motion profiling with PID feedback for differential drive robots.
+
+#### To explore this means of autonomous driving, two investigations will take place to consider the accuracy of the driving motion. The first being to consider whether or not PID feedback improves position accuracy to determine an optimal driving algorithm. While the second considers the speed accuracy for the motion profiled path and if differences from PID feedback is statistically significant. 
+
+#### Install & Load Required Packages
+```{R}
+knitr::opts_chunk$set(echo = TRUE)
+
+suppressWarnings({
+  if(!require("ggplot2")) {
+    install.packages("ggplot2", repo = "http://cran.us.r-project.org", quite = TRUE, message = FALSE)
+    require("ggplot2")
+  }
+  if(!require("ggtext")) {
+    install.packages("ggtext", repo = "http://cran.us.r-project.org", quite = TRUE, message = FALSE)
+    require("ggtext")  
+  }
+  if(!require("tidyverse")) {
+    install.packages("tidyverse", repo = "http://cran/us.r-project.org", quite = TRUE, message = FALSE)
+    require("tidyverse")
+  }
+  if(!require("knitr")) {
+    install.packages("knitr", quite = TRUE, message = FALSE)
+    require("knitr")
+    
+    library(dplyr)
+    library(stringr)
+  }
+})
+```
+
+## Methodology:
+
+#### The methodology breaks down to defining accuracy of autonomous driving and how to determine statistical significance. Accuracy can be handled by recording the poses of the robot as it drives along the spline path such that taking a difference between recorded poses' positions and headings with respect to waypoints along the path is system error. These differences can be normalized where position error is divided by the diameter of the robot and heading error is divided by 90 degree turn. These bounds are used because they are defined as ideal maximum magnitudes to changes in position relative to robot size and the maximum allowable turn to be made between two specified waypoints. These percent errors are then averaged over all recorded poses to define the average position and heading errors for a single attempt of driving along a path. Furthermore, these errors are to be referred as driving performance error of driving a spline path. 
+
+#### To explore the benefits of PID feedback in terms of driving performance, each of the varying PID controller coefficients were tested over a sample size of 100 attempted path driving trials. PID feedback was handled with two separate controllers being a linear speed and angular speed controllers. This gives six potential coefficients needing to be tuned. Five samples will be tested; those being when there is no PID feedback whatsoever followed by a set of four trials with coefficients determined from progressive PID auto-tuning phases. Initially, the PID controllers were tested after manual tuning, followed by two phases of autotuning the angular PID controller and then a phase for the linear PID controller. 
+
+#### This gives the test samples of (1) no feedback, (2) manually-tuned feedback, (3) linear PID auto-tuning, (4) second linear PID auto-tuning, and (5) angular PID auto-tuning. These samples were collected from running 100 driving attempts while collecting performance error for each of the samples. Each sample distribution was then tested for normality and equal variance as assumptions for grounds to compare each test sample by conducting an ANOVA analysis. Results were then used to draw conlcusions on which test sample performed best with minimal performance error either with or without PID feedback handling they may or may not have done better after auto-tuning. 
+
+#### To explore the benefits of PID feedback in terms of speed control, error can be defined as the average percent difference between the linear and angular speeds calculated as part of the motion profiling compared to the actual speeds set from the optimal PID feedback coefficients of the previous investigation. These data points were calculated as the robot approached each path waypoint and then averaged for a computed linear and angular speed percent errors for a single driving attempt. A sample were collected from 100 driving attempts to then tested for normality as part the the assumptions for grounds to determine if speed inaccuracies were statistically significant.  
+
+## Analyzing the Impact of PID Feedback on Driving Performance:
+
+#### To test for the impact of PID feedback on driving performance, a linear and angular PID controller were implemented to adjust motion-profiled linear and angular speeds to auto-correct performance error. Both controllers were used under the assumption auto-correction would require differing responses for linear and angular speeds given pose error and the linear acceleration from the motion profile of the robot. No PID feedback was tested with all controller coefficients set to zero; the two controllers were then manually tuned, and then followed by two phases of auto-tuning the linear PID controller, and a final tuning of the angular PID controller. Each tuning process starting with the coefficients computed as optimal from the previous tests. With these five test cases, test samples of 100 driving attempts was collected for cases: (1) no feedback, (2) manually-tuned feedback, (3) linear PID auto-tuning, (4) second linear PID auto-tuning, and (5) angular PID auto-tuning.
+
+```{R}
+
+
+```

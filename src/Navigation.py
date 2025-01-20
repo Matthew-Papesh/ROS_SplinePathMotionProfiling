@@ -16,7 +16,7 @@ import math
 import heapq
 
 # testing flags:
-INTERNAL_TESTING = True
+INTERNAL_TESTING = False
 
 class Navigation: 
 
@@ -49,11 +49,11 @@ class Navigation:
 
 
         # pid feedback coefficients (linear and angular differential speed PID)
-        #self.ANG_KP, self.ANG_KI, self.ANG_KD = 4.0, 0.0001, 4.0
-        #self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.0, 0.001, 0.5 
+        self.ANG_KP, self.ANG_KI, self.ANG_KD = 4.0, 0.0001, 4.0
+        self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.0, 0.001, 0.5 
         # PCT TEST #1
-        self.ANG_KP, self.ANG_KI, self.ANG_KD = 15.265625, 0.0000835, 14.829688
-        self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.050781, 0.002802, 1.097656  
+        #self.ANG_KP, self.ANG_KI, self.ANG_KD = 15.265625, 0.0000835, 14.829688
+        #self.LIN_KP, self.LIN_KI, self.LIN_KD = 1.050781, 0.002802, 1.097656  
         # Found Coefficients: 
         # Angular: kp = 15.152344, ki = 0.000083, kd = 15.357032
         # Linear: kp = 1.050781, ki = 0.002802, kd = 1.097656
@@ -386,7 +386,7 @@ class Navigation:
         # path of odometry poses recorded to have minimal error with respect to their corresponding spline path waypoint
         recorded_path = Path()
         # specified max time allowed to drive from one waypoint to the next before assuming that driving has failed
-        frontier_timeout = 1.0
+        frontier_timeout = 1.0 * 1
         # previous stamped time of reaching the next waypoint while driving
         prev_frontier_update_time = -1.0
 
