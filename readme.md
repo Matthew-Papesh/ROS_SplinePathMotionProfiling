@@ -17,3 +17,5 @@ Combining all of these concepts, the benefits of gradually-adjusted curved splin
 This project consists of a simulating spline path following on a turtlebot3 in ROS. This is done within a configured Gazebo/RViz environment with the following ROS package architecture. 
 
  <img title="ROS_pkg_project_hierarchy" src="./images/package_visual.png">
+
+ 

@@ -5,14 +5,6 @@ output: html_document
 date: "2025-01-19"
 ---
 
-## Abstract: 
-
-#### A great amount of robotics involves the driving of autonomous robots. Many come in the form of a two-wheeled or differential drive chassis. Meanwhile with so many algorithms and methods of programming how a robot should drive, such as point-to-point. However, approaches of driving such as point-to-point requires point-turns following execessive turning, and rigid path following regardless of if it involves motion profiling. 
-
-#### With respect to discussing specifically differential drive robots, following more organic or curved paths to a destination or traveling through specified positions can be a much more efficient means of driving. This can be done by driving along quintic spline paths generated from specified waypoints such that the robot travels to all needed locations with unecessary stops as a single fluid motion characterized by an overlayed motion profile and then auto-corrected by a PID feedback system. This concept leads into the idea of ROS spline path motion profiling with PID feedback for differential drive robots.
-
-#### To explore this means of autonomous driving, two investigations will take place to consider the accuracy of the driving motion. The first being to consider whether or not PID feedback improves position accuracy to determine an optimal driving algorithm. While the second considers the speed accuracy for the motion profiled path and if differences from PID feedback is statistically significant. 
-
 #### Install & Load Required Packages
 ```{R}
 knitr::opts_chunk$set(echo = TRUE)
@@ -31,30 +23,108 @@ suppressWarnings({
     require("tidyverse")
   }
   if(!require("knitr")) {
-    install.packages("knitr", quite = TRUE, message = FALSE)
+    install.packages("knitr", repo = "http://cran/us.r-project.org", quite = TRUE, message = FALSE)
     require("knitr")
-    
-    library(dplyr)
-    library(stringr)
+  }
+  if(!require("dplyr")) {
+    install.packages("dplyr", repo = "http://cran/us.r-project.org", quite = TRUE, message = FALSE)
+    require(dplyr)
+  }
+  if(!require("stringr")) {
+    install.packages("stringr", repo = "http://cran/us.r-project.org", quite = TRUE, message = FALSE)
+    require(stringr)
+  }
+  if(!require("corrplot")) {
+    install.packages("corrplot", repo = "http://cran/us.r-project.org", quite = TRUE, message = FALSE)
+    require(corplot)
+  }
+  if(!require("FSA")) {
+    install.packages("FSA", repo = "http://cran/us.r-project.org", quite = TRUE, message = FALSE)
+    require(FSA)
   }
 })
 ```
 
-## Methodology:
-
-#### The methodology breaks down to defining accuracy of autonomous driving and how to determine statistical significance. Accuracy can be handled by recording the poses of the robot as it drives along the spline path such that taking a difference between recorded poses' positions and headings with respect to waypoints along the path is system error. These differences can be normalized where position error is divided by the diameter of the robot and heading error is divided by 90 degree turn. These bounds are used because they are defined as ideal maximum magnitudes to changes in position relative to robot size and the maximum allowable turn to be made between two specified waypoints. These percent errors are then averaged over all recorded poses to define the average position and heading errors for a single attempt of driving along a path. Furthermore, these errors are to be referred as driving performance error of driving a spline path. 
-
-#### To explore the benefits of PID feedback in terms of driving performance, each of the varying PID controller coefficients were tested over a sample size of 100 attempted path driving trials. PID feedback was handled with two separate controllers being a linear speed and angular speed controllers. This gives six potential coefficients needing to be tuned. Five samples will be tested; those being when there is no PID feedback whatsoever followed by a set of four trials with coefficients determined from progressive PID auto-tuning phases. Initially, the PID controllers were tested after manual tuning, followed by two phases of autotuning the angular PID controller and then a phase for the linear PID controller. 
-
-#### This gives the test samples of (1) no feedback, (2) manually-tuned feedback, (3) linear PID auto-tuning, (4) second linear PID auto-tuning, and (5) angular PID auto-tuning. These samples were collected from running 100 driving attempts while collecting performance error for each of the samples. Each sample distribution was then tested for normality and equal variance as assumptions for grounds to compare each test sample by conducting an ANOVA analysis. Results were then used to draw conlcusions on which test sample performed best with minimal performance error either with or without PID feedback handling they may or may not have done better after auto-tuning. 
-
-#### To explore the benefits of PID feedback in terms of speed control, error can be defined as the average percent difference between the linear and angular speeds calculated as part of the motion profiling compared to the actual speeds set from the optimal PID feedback coefficients of the previous investigation. These data points were calculated as the robot approached each path waypoint and then averaged for a computed linear and angular speed percent errors for a single driving attempt. A sample were collected from 100 driving attempts to then tested for normality as part the the assumptions for grounds to determine if speed inaccuracies were statistically significant.  
-
-## Analyzing the Impact of PID Feedback on Driving Performance:
-
-#### To test for the impact of PID feedback on driving performance, a linear and angular PID controller were implemented to adjust motion-profiled linear and angular speeds to auto-correct performance error. Both controllers were used under the assumption auto-correction would require differing responses for linear and angular speeds given pose error and the linear acceleration from the motion profile of the robot. No PID feedback was tested with all controller coefficients set to zero; the two controllers were then manually tuned, and then followed by two phases of auto-tuning the linear PID controller, and a final tuning of the angular PID controller. Each tuning process starting with the coefficients computed as optimal from the previous tests. With these five test cases, test samples of 100 driving attempts was collected for cases: (1) no feedback, (2) manually-tuned feedback, (3) linear PID auto-tuning, (4) second linear PID auto-tuning, and (5) angular PID auto-tuning.
-
+# Import performance error data (from peformance trials)
 ```{R}
+# initial feedback system conditions:
+performance_err_NO_PID <- read.csv("./../spline_err_logs/err_log_feedback_NO_PID.csv")
+performance_err_INIT_PID <- read.csv("./../spline_err_logs/err_log_feedback_INIT_PID.csv")
+# computed feedback system conditions (auto-tuning)
+performance_err_AUTO_TUNED_1 <- read.csv("./../spline_err_logs/err_log_feedback_AP15_152344_AI0_000083_AD15_357032.csv") # after 1 round of angular PID auto-tuning
+performance_err_AUTO_TUNED_2 <- read.csv("./../spline_err_logs/err_log_feedback_AP15_097657_AI0_000083_AD14_949805.csv") # after 3 rounds of angular PID auto-tuning
+performance_err_AUTO_TUNED_3 <- read.csv("./../spline_err_logs/err_log_feedback_LP0_847656_LI0_002552_LD0_529297.csv") # after final tuning of 1 round of linear PID auto-tuning 
+```
 
+# Test Kruskall-Wallis Non-Parametric Test Assumptions:
+```{R}
+# position performance error samples:
+position_err_samples <- data.frame(
+  NO_PID = performance_err_NO_PID$position_err, 
+  INIT_PID = performance_err_INIT_PID$position_err, 
+  AUTO_TUNE_1 = performance_err_AUTO_TUNED_1$position_err, 
+  AUTO_TUNE_2 = performance_err_AUTO_TUNED_2$position_err, 
+  AUTO_TUNE_3 = performance_err_AUTO_TUNED_3$heading_err
+)
+# heading performance error samples:
+heading_err_samples <- data.frame(
+  NO_PID = performance_err_NO_PID$heading_err, 
+  INIT_PID = performance_err_INIT_PID$heading_err, 
+  AUTO_TUNE_1 = performance_err_AUTO_TUNED_1$heading_err, 
+  AUTO_TUNE_2 = performance_err_AUTO_TUNED_2$heading_err,
+  AUTO_TUNE_3 = performance_err_AUTO_TUNED_3$heading_err
+)
 
+# compute correlations by error type
+position_cor_matrix <- cor(position_err_samples, method = "spearman")
+heading_cor_matrix <- cor(heading_err_samples, method = "spearman")
+
+corrplot(
+  position_cor_matrix, 
+  method = "color",
+  type = "upper", 
+  tl.cex = 0.8,
+  tl.col = "black",
+  tl.srt = 30,
+  addCoef.col = "black",
+  title = "Spearman Correlation Map of Position Error Across Feedback Systems"
+)
+
+corrplot(
+  heading_cor_matrix,
+  method = "color", 
+  type = "upper", 
+  tl.cex = 0.6, 
+  tl.col = "black",
+  tl.srt = 30, 
+  addCoef.col = "black",
+  title = "Spearman Correlation Map of Heading Error Across Feedback Systems"
+)
+
+```
+
+# Perform Kruskal-Wallis & Dunn Tests:
+```{R}
+# position errors concatenated by sample type
+position_err_by_sample <- data.frame(
+  position_err = c(performance_err_NO_PID$position_err, performance_err_INIT_PID$position_err, 
+                   performance_err_AUTO_TUNED_1$position_err, performance_err_AUTO_TUNED_2$position_err, performance_err_AUTO_TUNED_3$position_err),
+  sample_type = c(rep("NO_PID", length(performance_err_NO_PID$position_err)), rep("INIT_PID", length(performance_err_INIT_PID$position_err)), 
+                  rep("AUTO_TUNE_1", length(performance_err_AUTO_TUNED_1$position_err)), rep("AUTO_TUNE_2", length(performance_err_AUTO_TUNED_2$position_err)), 
+                  rep("AUTO_TUNE_3", length(performance_err_AUTO_TUNED_3$position_err)))
+)
+# heading errors concatenated by sample type
+heading_err_by_sample <- data.frame(
+  heading_err = c(performance_err_NO_PID$heading_err, performance_err_INIT_PID$heading_err, 
+                   performance_err_AUTO_TUNED_1$heading_err, performance_err_AUTO_TUNED_2$heading_err, performance_err_AUTO_TUNED_3$heading_err),
+  sample_type = c(rep("NO_PID", length(performance_err_NO_PID$heading_err)), rep("INIT_PID", length(performance_err_INIT_PID$heading_err)), 
+                  rep("AUTO_TUNE_1", length(performance_err_AUTO_TUNED_1$heading_err)), rep("AUTO_TUNE_2", length(performance_err_AUTO_TUNED_2$heading_err)), 
+                  rep("AUTO_TUNE_3", length(performance_err_AUTO_TUNED_3$heading_err)))
+)
+
+kruskal.test(position_err ~ sample_type, data = position_err_by_sample)
+kruskal.test(heading_err ~ sample_type, data = heading_err_by_sample)
+
+dunnTest(position_err ~ sample_type, data = position_err_by_sample)
+dunnTest(heading_err ~ sample_type, data = heading_err_by_sample)
 ```
