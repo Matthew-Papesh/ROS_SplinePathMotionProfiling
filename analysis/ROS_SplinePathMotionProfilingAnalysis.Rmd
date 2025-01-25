@@ -18,6 +18,10 @@ suppressWarnings({
     install.packages("ggtext", repo = "http://cran.us.r-project.org", quite = TRUE, message = FALSE)
     require("ggtext")  
   }
+  if(!require("ggpattern")) {
+    install.packages("ggpattern", repo = "http://cran.us.r-project.org", quite = TRUE, message = FALSE)
+    require("ggpattern")
+  }
   if(!require("tidyverse")) {
     install.packages("tidyverse", repo = "http://cran/us.r-project.org", quite = TRUE, message = FALSE)
     require("tidyverse")
@@ -47,6 +51,8 @@ suppressWarnings({
 
 # Import performance error data (from peformance trials)
 ```{R}
+# size of each sample:
+SAMPLE_SIZE = 100
 # initial feedback system conditions:
 performance_err_NO_PID <- read.csv("./../spline_err_logs/err_log_feedback_NO_PID.csv")
 performance_err_INIT_PID <- read.csv("./../spline_err_logs/err_log_feedback_INIT_PID.csv")
@@ -103,7 +109,7 @@ corrplot(
 
 ```
 
-# Perform Kruskal-Wallis & Dunn Tests:
+# Construct Data Frames of error type (heading/position) grouped by feedback system type (no pid, init pid, etc)  
 ```{R}
 # position errors concatenated by sample type
 position_err_by_sample <- data.frame(
@@ -121,10 +127,43 @@ heading_err_by_sample <- data.frame(
                   rep("AUTO_TUNE_1", length(performance_err_AUTO_TUNED_1$heading_err)), rep("AUTO_TUNE_2", length(performance_err_AUTO_TUNED_2$heading_err)), 
                   rep("AUTO_TUNE_3", length(performance_err_AUTO_TUNED_3$heading_err)))
 )
+```
 
+# Perform Kruskal-Wallis & Dunn Tests:
+```{R}
 kruskal.test(position_err ~ sample_type, data = position_err_by_sample)
 kruskal.test(heading_err ~ sample_type, data = heading_err_by_sample)
 
 dunnTest(position_err ~ sample_type, data = position_err_by_sample)
 dunnTest(heading_err ~ sample_type, data = heading_err_by_sample)
+```
+
+# View error distributions: 
+```{R}
+caption <- "This is a **caption**"
+ggplot(data = filter(filter(position_err_by_sample, sample_type != "NO_PID"), position_err < 1), aes(x = sample_type, y = position_err, colour = sample_type)) + 
+  geom_boxplot() +
+  xlab("PID Feedback Type") + 
+  ylab("Position Performance Error") + 
+  labs(title = "PID Feedback Affect on Position Performance Error", subtitle = "", caption = caption) +
+  scale_fill_hue(c = 40) +
+  stat_summary(fun = mean, geom = "point", shape = 20, size = 8) + 
+  theme(plot.caption = element_markdown(hjust = 0))
+
+  
+position_failure_count_by_sample <- data.frame(
+  failures = c(
+    nrow(filter(position_err_by_sample, sample_type == "AUTO_TUNE_1" & position_err == 1.0)) / SAMPLE_SIZE,
+    nrow(filter(position_err_by_sample, sample_type == "AUTO_TUNE_2" & position_err == 1.0)) / SAMPLE_SIZE,
+    nrow(filter(position_err_by_sample, sample_type == "AUTO_TUNE_3"& position_err == 1.0)) / SAMPLE_SIZE,
+    nrow(filter(position_err_by_sample, sample_type == "INIT_PID" & position_err == 1.0)) / SAMPLE_SIZE
+  ), 
+  sample_type = c("AUTO_TUNE_1", "AUTO_TUNE_2", "AUTO_TUNE_3", "INIT_PID")
+)
+
+ggplot(data = position_failure_count_by_sample, aes(x = sample_type, y = failures, colour = "grey", pattern_fill = sample_type), y = failures) + 
+  geom_bar(data = position_failure_count_by_sample, stat = "identity", width = 0.5)
+   
+
+
 ```
